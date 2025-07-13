@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block title %}Available Jobs{% endblock %}
@@ -29,7 +28,7 @@
                     </div>
                     <div class="card-body">
                         <p class="card-text">{{ job[2][:150] }}{% if job[2]|length > 150 %}...{% endif %}</p>
-                        
+
                         <div class="job-details">
                             <p><strong>Location:</strong> {{ job[3] or 'Not specified' }}</p>
                             <p><strong>Type:</strong> {{ job[6].title() if job[6] else 'Full-time' }}</p>
