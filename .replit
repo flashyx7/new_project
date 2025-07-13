@@ -59,3 +59,7 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python edge_service/main.py"
+
+[[ports]]
+localPort = 8080
+externalPort = 80
