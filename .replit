@@ -50,3 +50,12 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python scripts/test_system.py"
+
+[[workflows.workflow]]
+name = "Start Edge Service Only"
+author = 44894209
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python edge_service/main.py"
