@@ -343,9 +343,18 @@ async def health_check():
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
 
-# Session middleware
+# Session middleware - add before other middleware
 from starlette.middleware.sessions import SessionMiddleware
-app.add_middleware(SessionMiddleware, secret_key="your-secret-key-here")
+app.add_middleware(SessionMiddleware, secret_key="your-secret-key-here-change-in-production")
+
+# Error handler for unhandled exceptions
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception", error=str(exc), path=request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"}
+    )
 
 if __name__ == "__main__":
     logger.info("Starting Edge Service")
@@ -353,5 +362,6 @@ if __name__ == "__main__":
         app,
         host="0.0.0.0",
         port=8080,
-        reload=False
+        reload=False,
+        log_level="info"
     )
