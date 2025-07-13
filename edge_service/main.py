@@ -93,14 +93,14 @@ SERVICE_ROUTES = {
 
 class CircuitBreaker:
     """Simple circuit breaker implementation."""
-    
+
     def __init__(self, failure_threshold=5, recovery_timeout=60):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout
         self.failure_count = 0
         self.last_failure_time = None
         self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
-    
+
     def call(self, func, *args, **kwargs):
         """Execute function with circuit breaker protection."""
         if self.state == "OPEN":
@@ -112,7 +112,7 @@ class CircuitBreaker:
                     status_code=503,
                     detail="Service temporarily unavailable"
                 )
-        
+
         try:
             result = func(*args, **kwargs)
             if self.state == "HALF_OPEN":
@@ -123,31 +123,31 @@ class CircuitBreaker:
         except Exception as e:
             self.failure_count += 1
             self.last_failure_time = time.time()
-            
+
             if self.failure_count >= self.failure_threshold:
                 self.state = "OPEN"
                 logger.warning("Circuit breaker opened", failure_count=self.failure_count)
-            
+
             raise e
 
 class ServiceDiscovery:
     """Service discovery and routing with circuit breaker."""
-    
+
     def __init__(self):
         self.service_cache = {}
         self.circuit_breakers = {}
         self.cache_ttl = 30  # seconds
-    
+
     async def get_service_instance(self, service_name: str) -> Optional[Dict[str, Any]]:
         """Get service instance from discovery service with caching."""
         current_time = time.time()
-        
+
         # Check cache first
         if service_name in self.service_cache:
             cache_entry = self.service_cache[service_name]
             if current_time - cache_entry["timestamp"] < self.cache_ttl:
                 return cache_entry["instance"]
-        
+
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(f"{discovery_service_url}/services/{service_name}")
@@ -166,26 +166,26 @@ class ServiceDiscovery:
         except Exception as e:
             logger.error("Failed to get service instance", service_name=service_name, error=str(e))
             return None
-    
+
     async def route_request(self, service_name: str, path: str, method: str, 
                           headers: Dict, body: Optional[bytes] = None) -> Response:
         """Route request to appropriate service with circuit breaker."""
         # Get or create circuit breaker for this service
         if service_name not in self.circuit_breakers:
             self.circuit_breakers[service_name] = CircuitBreaker()
-        
+
         circuit_breaker = self.circuit_breakers[service_name]
-        
+
         def make_request():
             return asyncio.create_task(self._make_request(service_name, path, method, headers, body))
-        
+
         try:
             result = await circuit_breaker.call(make_request)
             return result
         except Exception as e:
             logger.error("Request routing failed", service_name=service_name, error=str(e))
             raise HTTPException(status_code=503, detail="Service unavailable")
-    
+
     async def _make_request(self, service_name: str, path: str, method: str, 
                           headers: Dict, body: Optional[bytes] = None) -> Response:
         """Make the actual HTTP request to the service."""
@@ -193,24 +193,24 @@ class ServiceDiscovery:
         route_config = SERVICE_ROUTES.get(service_name, {})
         if not route_config:
             raise HTTPException(status_code=404, detail=f"Service {service_name} not found")
-        
+
         target_path = route_config.get("target_path", "/")
         host = route_config.get("host", "localhost")
         port = route_config.get("port", 80)
-        
+
         # Construct the target URL
         service_path = path[len(route_config['prefix']):] if path.startswith(route_config['prefix']) else path
         if not service_path.startswith('/'):
             service_path = '/' + service_path
-        
+
         # Use target_path if specified, otherwise use service_path
         if target_path and target_path != "/":
             final_path = target_path + service_path
         else:
             final_path = service_path
-        
+
         target_url = f"http://{host}:{port}{final_path}"
-        
+
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.request(
@@ -219,7 +219,7 @@ class ServiceDiscovery:
                     headers=headers,
                     content=body
                 )
-                
+
                 return Response(
                     content=response.content,
                     status_code=response.status_code,
@@ -251,24 +251,24 @@ async def route_to_service(service_name: str, path: str, method: str,
     route_config = SERVICE_ROUTES.get(service_name, {})
     if not route_config:
         raise HTTPException(status_code=404, detail=f"Service {service_name} not found")
-    
+
     target_path = route_config.get("target_path", "/")
     host = route_config.get("host", "localhost")
     port = route_config.get("port", 80)
-    
+
     # Construct the target URL
     service_path = path[len(route_config['prefix']):] if path.startswith(route_config['prefix']) else path
     if not service_path.startswith('/'):
         service_path = '/' + service_path
-    
+
     # Use target_path if specified, otherwise use service_path
     if target_path and target_path != "/":
         final_path = target_path + service_path
     else:
         final_path = service_path
-    
+
     target_url = f"http://{host}:{port}{final_path}"
-    
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.request(
@@ -277,7 +277,7 @@ async def route_to_service(service_name: str, path: str, method: str,
                 headers=headers,
                 content=body
             )
-            
+
             return Response(
                 content=response.content,
                 status_code=response.status_code,
@@ -313,16 +313,16 @@ def validate_token_dependency(credentials: Optional[HTTPAuthorizationCredentials
 async def log_requests(request: Request, call_next):
     """Log all incoming requests."""
     start_time = time.time()
-    
+
     # Log request
     logger.info("Incoming request",
                method=request.method,
                url=str(request.url),
                client_ip=request.client.host if request.client else None)
-    
+
     try:
         response = await call_next(request)
-        
+
         # Log response
         process_time = time.time() - start_time
         logger.info("Request completed",
@@ -330,7 +330,7 @@ async def log_requests(request: Request, call_next):
                    url=str(request.url),
                    status_code=response.status_code,
                    process_time=process_time)
-        
+
         return response
     except Exception as e:
         # Log error
@@ -350,7 +350,7 @@ async def startup_event():
         # Test Consul connection
         consul_client.agent.self()
         logger.info("Successfully connected to Consul", host=consul_host, port=consul_port)
-        
+
         # Register service with discovery service
         service_registration = {
             "service_name": "edge-service",
@@ -359,7 +359,7 @@ async def startup_event():
             "port": 8080,
             "tags": ["edge", "gateway", "routing"]
         }
-        
+
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.post(
                 f"{discovery_service_url}/register",
@@ -369,7 +369,7 @@ async def startup_event():
                 logger.info("Successfully registered with discovery service")
             else:
                 logger.warning("Failed to register with discovery service", status_code=response.status_code)
-                
+
     except Exception as e:
         logger.warning("Startup: Could not register with discovery service", error=str(e))
 
@@ -393,22 +393,22 @@ async def debug_path(path: str):
 try:
     app.mount("/static", StaticFiles(directory="edge_service/static"), name="static")
     templates = Jinja2Templates(directory="edge_service/templates")
-    
+
     @app.get("/", response_class=HTMLResponse)
     async def index(request: Request):
         return templates.TemplateResponse("index.html", {"request": request})
-    
+
     @app.get("/application", response_class=HTMLResponse)
     async def application_page(request: Request):
         return templates.TemplateResponse("application.html", {"request": request})
-    
+
     @app.get("/application_list", response_class=HTMLResponse)
     async def application_list_page(request: Request):
         return templates.TemplateResponse("application_list.html", {"request": request})
-        
+
 except Exception as e:
     logger.warning("Web interface not available", error=str(e))
-    
+
     @app.get("/")
     async def fallback_index():
         return {"message": "Edge Service API Gateway", "status": "running"}
@@ -423,12 +423,12 @@ async def route_registration(
     try:
         full_path = f"/registration/{path}"
         logger.info(f"Registration request: {request.method} {full_path}")
-        
+
         # Get request body
         body = None
         if request.method in ["POST", "PUT", "PATCH"]:
             body = await request.body()
-        
+
         # Route to registration service
         response = await route_to_service(
             service_name="registration-service",
@@ -437,9 +437,9 @@ async def route_registration(
             headers=dict(request.headers),
             body=body
         )
-        
+
         return response
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -456,12 +456,12 @@ async def route_auth(
     try:
         full_path = f"/auth/{path}"
         logger.info(f"Auth request: {request.method} {full_path}")
-        
+
         # Get request body
         body = None
         if request.method in ["POST", "PUT", "PATCH"]:
             body = await request.body()
-        
+
         # Route to auth service
         response = await route_to_service(
             service_name="auth-service",
@@ -470,9 +470,9 @@ async def route_auth(
             headers=dict(request.headers),
             body=body
         )
-        
+
         return response
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -489,12 +489,12 @@ async def route_job_applications(
     try:
         full_path = f"/jobapplications/{path}"
         logger.info(f"Job application request: {request.method} {full_path}")
-        
+
         # Get request body
         body = None
         if request.method in ["POST", "PUT", "PATCH"]:
             body = await request.body()
-        
+
         # Route to job application service
         response = await route_to_service(
             service_name="job-application-service",
@@ -503,9 +503,9 @@ async def route_job_applications(
             headers=dict(request.headers),
             body=body
         )
-        
+
         return response
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -519,7 +519,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
                   status_code=exc.status_code,
                   detail=exc.detail,
                   path=str(request.url))
-    
+
     return JSONResponse(
         status_code=exc.status_code,
         content={"error": exc.detail, "status_code": exc.status_code}
@@ -531,7 +531,7 @@ async def general_exception_handler(request: Request, exc: Exception):
     logger.error("Unhandled exception",
                 error=str(exc),
                 path=str(request.url))
-    
+
     return JSONResponse(
         status_code=500,
         content={"error": "Internal server error", "status_code": 500}
@@ -539,4 +539,4 @@ async def general_exception_handler(request: Request, exc: Exception):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8080) 
+    uvicorn.run(app, host="0.0.0.0", port=8080)
