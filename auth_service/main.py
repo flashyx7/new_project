@@ -116,9 +116,12 @@ async def startup_event():
         consul_client.agent.self()
         logger.info("Successfully connected to Consul", host=consul_host, port=consul_port)
         
-        # Initialize database
-        init_db()
-        logger.info("Database initialized")
+        # Initialize database (optional)
+        try:
+            init_db()
+            logger.info("Database initialized")
+        except Exception as e:
+            logger.warning("Database initialization failed, continuing without database", error=str(e))
         
         # Register service with discovery service
         service_registration = {
@@ -140,8 +143,7 @@ async def startup_event():
                 logger.warning("Failed to register with discovery service")
                 
     except Exception as e:
-        logger.error("Failed to initialize auth service", error=str(e))
-        raise
+        logger.warning("Some initialization steps failed, but service will continue", error=str(e))
 
 @app.get("/health")
 async def health_check():
@@ -175,6 +177,31 @@ async def generate_jwt_token(
     except Exception as e:
         logger.warning({"error": str(e), "event": "Authentication failed"})
         return {"error": str(e), "message": "Authentication failed"}
+
+@app.post("/login", response_model=AuthTokenResponse)
+async def generate_jwt_token_alias(
+    auth_request: AuthRequest,
+    db: Session = Depends(get_db)
+):
+    """Alias for /auth/login for compatibility with edge service routing."""
+    logger.info("/login (alias) received request")
+    try:
+        login_service = LoginService(db)
+        jwt_token = login_service.authenticate_and_get_token(
+            auth_request.username, 
+            auth_request.password
+        )
+        logger.info("Authentication passed and token created! (alias)")
+        return AuthTokenResponse(token=jwt_token)
+    except ValueError as e:
+        logger.warning("Authentication failed (alias)", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"message": str(e)}
+        )
+    except Exception as e:
+        logger.warning({"error": str(e), "event": "Authentication failed (alias)"})
+        return {"error": str(e), "message": "Authentication failed (alias)"}
 
 @app.get("/auth/validate")
 async def validate_token(

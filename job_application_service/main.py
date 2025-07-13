@@ -71,14 +71,26 @@ class JobApplicationService:
     
     def get_application_by_id(self, application_id: int, language: str) -> ApplicationResponse:
         """Get application by ID."""
-        application = self.db.query(Application).filter(
-            Application.id == application_id
-        ).first()
-        
-        if not application:
-            raise ValueError("Application not found")
-        
-        return self._build_application_response(application)
+        try:
+            application = self.db.query(Application).filter(
+                Application.id == application_id
+            ).first()
+            
+            if not application:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Application with ID {application_id} not found"
+                )
+            
+            return self._build_application_response(application)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("Failed to get application by ID", application_id=application_id, error=str(e))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error"
+            )
     
     def get_applications_by_param(self, param: ApplicationParamForm, language: str) -> List[ApplicationResponse]:
         """Get applications by parameters."""
@@ -251,9 +263,12 @@ async def startup_event():
         consul_client.agent.self()
         logger.info("Successfully connected to Consul", host=consul_host, port=consul_port)
         
-        # Initialize database
-        init_db()
-        logger.info("Database initialized")
+        # Initialize database (optional)
+        try:
+            init_db()
+            logger.info("Database initialized")
+        except Exception as e:
+            logger.warning("Database initialization failed, continuing without database", error=str(e))
         
         # Register service with discovery service
         service_registration = {
@@ -275,8 +290,7 @@ async def startup_event():
                 logger.warning("Failed to register with discovery service")
                 
     except Exception as e:
-        logger.error("Failed to initialize job application service", error=str(e))
-        raise
+        logger.warning("Some initialization steps failed, but service will continue", error=str(e))
 
 @app.get("/health")
 async def health_check():

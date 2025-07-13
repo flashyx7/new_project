@@ -1,8 +1,12 @@
 import os
 import jwt
+import structlog
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from typing import Optional, Dict, Any
+
+# Configure logging
+logger = structlog.get_logger()
 
 # Use pbkdf2_sha256 for password hashing (pure Python, cross-platform)
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -10,34 +14,62 @@ pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 # JWT settings
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
 JWT_ALGORITHM = "HS256"
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = 30
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception as e:
+        logger.error("Password verification failed", error=str(e))
+        return False
 
 def get_password_hash(password: str) -> str:
     """Generate password hash."""
-    return pwd_context.hash(password)
+    try:
+        return pwd_context.hash(password)
+    except Exception as e:
+        logger.error("Password hashing failed", error=str(e))
+        raise ValueError("Failed to hash password")
 
 def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token."""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
+    try:
+        to_encode = data.copy()
+        if expires_delta:
+            expire = datetime.utcnow() + expires_delta
+        else:
+            expire = datetime.utcnow() + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+        
+        to_encode.update({"exp": expire, "iat": datetime.utcnow()})
+        encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+        logger.info("JWT token created successfully", username=data.get("username"))
+        return encoded_jwt
+    except Exception as e:
+        logger.error("Failed to create JWT token", error=str(e))
+        raise ValueError("Failed to create access token")
 
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify and decode a JWT token."""
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        
+        # Check if token is expired
+        exp = payload.get("exp")
+        if exp and datetime.utcnow() > datetime.fromtimestamp(exp):
+            logger.warning("JWT token expired", username=payload.get("username"))
+            return None
+            
+        logger.debug("JWT token verified successfully", username=payload.get("username"))
         return payload
-    except jwt.PyJWTError:
+    except jwt.ExpiredSignatureError:
+        logger.warning("JWT token expired")
+        return None
+    except jwt.InvalidTokenError as e:
+        logger.warning("Invalid JWT token", error=str(e))
+        return None
+    except Exception as e:
+        logger.error("JWT token verification failed", error=str(e))
         return None
 
 def decode_token(token: str) -> Optional[Dict[str, Any]]:
@@ -45,5 +77,9 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
         return payload
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as e:
+        logger.warning("JWT token decode failed", error=str(e))
+        return None
+    except Exception as e:
+        logger.error("JWT token decode failed", error=str(e))
         return None 

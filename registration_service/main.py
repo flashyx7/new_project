@@ -66,46 +66,63 @@ class UserManager:
     
     def register(self, registration_form: RegistrationForm) -> None:
         """Register a new user."""
-        # Check if username already exists
-        existing_credential = self.db.query(Credential).filter(
-            Credential.username == registration_form.username
-        ).first()
+        try:
+            # Check if username already exists
+            existing_credential = self.db.query(Credential).filter(
+                Credential.username == registration_form.username
+            ).first()
+            
+            if existing_credential:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Username already exists"
+                )
+            
+            # Check if email already exists
+            existing_person = self.db.query(Person).filter(
+                Person.email == registration_form.email
+            ).first()
+            
+            if existing_person:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Email already exists"
+                )
         
-        if existing_credential:
-            raise ValueError("Username already exists")
-        
-        # Check if email already exists
-        existing_person = self.db.query(Person).filter(
-            Person.email == registration_form.email
-        ).first()
-        
-        if existing_person:
-            raise ValueError("Email already exists")
-        
-        # Create new person
-        person = Person(
-            firstname=registration_form.firstname,
-            lastname=registration_form.lastname,
-            date_of_birth=registration_form.date_of_birth,
-            email=registration_form.email,
-            role_id=getattr(registration_form, 'role_id', 2)  # Use role_id from form or default to Applicant
-        )
-        
-        self.db.add(person)
-        self.db.flush()  # Get the person ID
-        
-        # Create credentials
-        hashed_password = get_password_hash(registration_form.password)
-        credential = Credential(
-            person_id=person.id,
-            username=registration_form.username,
-            password=hashed_password
-        )
-        
-        self.db.add(credential)
-        self.db.commit()
-        
-        logger.info("User registered successfully", username=registration_form.username)
+            # Create new person
+            person = Person(
+                firstname=registration_form.firstname,
+                lastname=registration_form.lastname,
+                date_of_birth=registration_form.date_of_birth,
+                email=registration_form.email,
+                role_id=getattr(registration_form, 'role_id', 2)  # Use role_id from form or default to Applicant
+            )
+            
+            self.db.add(person)
+            self.db.flush()  # Get the person ID
+            
+            # Create credentials
+            hashed_password = get_password_hash(registration_form.password)
+            credential = Credential(
+                person_id=person.id,
+                username=registration_form.username,
+                password=hashed_password
+            )
+            
+            self.db.add(credential)
+            self.db.commit()
+            
+            logger.info("User registered successfully", username=registration_form.username)
+        except HTTPException:
+            self.db.rollback()
+            raise
+        except Exception as e:
+            self.db.rollback()
+            logger.error("Failed to register user", error=str(e))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Internal server error"
+            )
     
     def get_user_by_id(self, user_id: int, lang: str) -> Person:
         """Get user by ID."""
@@ -151,9 +168,12 @@ async def startup_event():
         consul_client.agent.self()
         logger.info("Successfully connected to Consul", host=consul_host, port=consul_port)
         
-        # Initialize database
-        init_db()
-        logger.info("Database initialized")
+        # Initialize database (optional)
+        try:
+            init_db()
+            logger.info("Database initialized")
+        except Exception as e:
+            logger.warning("Database initialization failed, continuing without database", error=str(e))
         
         # Register service with discovery service
         service_registration = {
@@ -175,8 +195,7 @@ async def startup_event():
                 logger.warning("Failed to register with discovery service")
                 
     except Exception as e:
-        logger.error("Failed to initialize registration service", error=str(e))
-        raise
+        logger.warning("Some initialization steps failed, but service will continue", error=str(e))
 
 @app.get("/health")
 async def health_check():

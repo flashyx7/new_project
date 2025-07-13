@@ -1,138 +1,177 @@
 #!/usr/bin/env python3
 """
-Database initialization script for the recruitment system.
-This script creates all necessary tables and inserts test data.
+Database initialization script for the Recruitment System.
 """
 
+import pymysql
+import structlog
 import os
 import sys
-from sqlalchemy import create_engine, text
-from passlib.context import CryptContext
 
-# Add the project root to the Python path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Configure logging
+structlog.configure(
+    processors=[
+        structlog.stdlib.filter_by_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
+        structlog.processors.UnicodeDecoder(),
+        structlog.processors.JSONRenderer()
+    ],
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    wrapper_class=structlog.stdlib.BoundLogger,
+    cache_logger_on_first_use=True,
+)
 
-from shared.database import engine, Base
-from shared.models import Person, Credential, Role
+logger = structlog.get_logger()
 
-# Password hashing context
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+# Database configuration
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = int(os.getenv("DB_PORT", "3307"))
+DB_USER = os.getenv("DB_USER", "recruitment_user")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "recruitment_pass")
+DB_NAME = os.getenv("DB_NAME", "recruitment_system")
 
-def hash_password(password: str) -> str:
-    """Hash a password using pbkdf2_sha256."""
-    return pwd_context.hash(password)
-
-def init_database():
-    """Initialize the database with tables and test data."""
-    print("Initializing database...")
-    
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
-    print("Tables created successfully.")
-    
-    # Create a session to insert data
-    from sqlalchemy.orm import sessionmaker
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    db = SessionLocal()
-    
+def create_database():
+    """Create the database if it doesn't exist."""
     try:
-        # Check if roles already exist
-        existing_roles = db.query(Role).all()
-        if existing_roles:
-            print("Roles already exist, skipping role creation.")
-        else:
-            # Create roles
-            roles = [
-                Role(id=1, name="ROLE_RECRUITER"),
-                Role(id=2, name="ROLE_APPLICANT"),
-                Role(id=3, name="Admin")
-            ]
-            db.add_all(roles)
-            db.commit()
-            print("Roles created successfully.")
+        # Connect to MySQL server (without specifying database)
+        connection = pymysql.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            charset='utf8mb4'
+        )
         
-        # Check if test users already exist
-        existing_credentials = db.query(Credential).filter(
-            Credential.username.in_(["admin", "applicant"])
-        ).all()
-        
-        if existing_credentials:
-            print("Test users already exist, skipping user creation.")
-        else:
-            # Create test users
-            # Admin user
-            admin_person = Person(
-                firstname="Admin",
-                lastname="User",
-                date_of_birth="1990-01-01",
-                email="admin@example.com",
-                role_id=3  # Admin role
-            )
-            db.add(admin_person)
-            db.flush()  # Get the ID
+        with connection.cursor() as cursor:
+            # Create database if it doesn't exist
+            cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME}")
+            logger.info(f"Database '{DB_NAME}' created or already exists")
             
-            admin_credential = Credential(
-                username="admin",
-                password=hash_password("admin123"),
-                person_id=admin_person.id
-            )
-            db.add(admin_credential)
-            
-            # Applicant user
-            applicant_person = Person(
-                firstname="Applicant",
-                lastname="User",
-                date_of_birth="1995-01-01",
-                email="applicant@example.com",
-                role_id=2  # Applicant role
-            )
-            db.add(applicant_person)
-            db.flush()  # Get the ID
-            
-            applicant_credential = Credential(
-                username="applicant",
-                password=hash_password("applicant123"),
-                person_id=applicant_person.id
-            )
-            db.add(applicant_credential)
-            
-            db.commit()
-            print("Test users created successfully.")
-            print("Admin user: admin / admin123")
-            print("Applicant user: applicant / applicant123")
-        
-        # Create additional test data if needed
-        # Check if competence data exists
-        from shared.models import Competence, Status
-        existing_competences = db.query(Competence).all()
-        if not existing_competences:
-            # Create some test competences
-            competences = [
-                Competence(id=1, name="Python Programming"),
-                Competence(id=2, name="FastAPI Development"),
-                Competence(id=3, name="Database Design")
-            ]
-            db.add_all(competences)
-            
-            # Create statuses
-            statuses = [
-                Status(id=0, name="PENDING"),
-                Status(id=1, name="REJECTED"),
-                Status(id=2, name="ACCEPTED")
-            ]
-            db.add_all(statuses)
-            
-            db.commit()
-            print("Test competences and statuses created successfully.")
-        
-        print("Database initialization completed successfully!")
+        connection.close()
+        return True
         
     except Exception as e:
-        print(f"Error initializing database: {e}")
-        db.rollback()
-        raise
-    finally:
-        db.close()
+        logger.error(f"Failed to create database: {e}")
+        return False
+
+def execute_sql_file(connection, file_path):
+    """Execute SQL commands from a file."""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            sql_content = file.read()
+        
+        # Split by semicolon and execute each statement
+        statements = [stmt.strip() for stmt in sql_content.split(';') if stmt.strip()]
+        
+        with connection.cursor() as cursor:
+            for statement in statements:
+                if statement:
+                    cursor.execute(statement)
+                    logger.info(f"Executed SQL statement: {statement[:50]}...")
+        
+        connection.commit()
+        logger.info(f"Successfully executed SQL file: {file_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Failed to execute SQL file {file_path}: {e}")
+        return False
+
+def initialize_database():
+    """Initialize the database with schema and data."""
+    try:
+        # Create database
+        if not create_database():
+            return False
+        
+        # Connect to the specific database
+        connection = pymysql.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            charset='utf8mb4'
+        )
+        
+        # Execute schema file
+        schema_file = "database/recruitmentsystem.sql"
+        if os.path.exists(schema_file):
+            if not execute_sql_file(connection, schema_file):
+                connection.close()
+                return False
+        else:
+            logger.warning(f"Schema file not found: {schema_file}")
+        
+        # Execute data file
+        data_file = "database/data.sql"
+        if os.path.exists(data_file):
+            if not execute_sql_file(connection, data_file):
+                connection.close()
+                return False
+        else:
+            logger.warning(f"Data file not found: {data_file}")
+        
+        connection.close()
+        logger.info("Database initialization completed successfully")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Database initialization failed: {e}")
+        return False
+
+def test_connection():
+    """Test database connection."""
+    try:
+        connection = pymysql.connect(
+            host=DB_HOST,
+            port=DB_PORT,
+            user=DB_USER,
+            password=DB_PASSWORD,
+            database=DB_NAME,
+            charset='utf8mb4'
+        )
+        
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+            result = cursor.fetchone()
+            if result and result[0] == 1:
+                logger.info("Database connection test successful")
+                connection.close()
+                return True
+        
+        connection.close()
+        return False
+        
+    except Exception as e:
+        logger.error(f"Database connection test failed: {e}")
+        return False
+
+def main():
+    """Main function."""
+    logger.info("Starting database initialization")
+    
+    # Check if MySQL is running
+    logger.info("Testing database connection...")
+    if not test_connection():
+        logger.error("Cannot connect to database. Please ensure MySQL is running.")
+        logger.info("You can start MySQL using Docker with:")
+        logger.info("docker run --name mysql-recruitment -e MYSQL_ROOT_PASSWORD=root -e MYSQL_DATABASE=recruitment_system -e MYSQL_USER=recruitment_user -e MYSQL_PASSWORD=recruitment_pass -p 3307:3306 -d mysql:8.0")
+        return False
+    
+    # Initialize database
+    if initialize_database():
+        logger.info("Database initialization completed successfully!")
+        return True
+    else:
+        logger.error("Database initialization failed!")
+        return False
 
 if __name__ == "__main__":
-    init_database() 
+    success = main()
+    sys.exit(0 if success else 1) 
