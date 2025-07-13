@@ -6,7 +6,7 @@ pydantic==2.5.0
 # Database
 sqlalchemy==2.0.23
 pymysql==1.1.0
-cryptography==41.0.8
+cryptography>=41.0.0,<45.0.0
 
 # Authentication and security
 python-jose[cryptography]==3.3.0
@@ -96,6 +96,32 @@ uvicorn[standard]
 aiofiles
 asyncio-mqtt
 cryptography
+email-validator
+fastapi
+healthcheck
+httpx
+jinja2
+orjson
+passlib[bcrypt]
+prometheus-client
+pydantic
+pymysql
+pytest
+pytest-asyncio
+pytest-cov
+python-consul2
+python-dateutil
+python-dotenv
+python-jose[cryptography]
+python-multipart
+requests
+sentry-sdk[fastapi]
+slowapi
+sqlalchemy
+structlog
+uvicorn[standard]
+aiofiles
+asyncio-mqtt
 email-validator
 fastapi
 healthcheck

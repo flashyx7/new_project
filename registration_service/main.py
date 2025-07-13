@@ -1,24 +1,20 @@
 from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from sqlalchemy.exc import IntegrityError
+from typing import Optional
 import structlog
-import consul
-import httpx
 import os
-
-# Import shared modules
 import sys
-import os
-# Add the project root to the path
+
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
+
+from shared.database import get_db, create_tables
 from shared.models import Person, Credential, Role
-from shared.schemas import (
-    RegistrationForm, RegistrationResponse, UserCredentialsDTO
-)
-from shared.security import get_password_hash, verify_password, create_access_token, verify_token
-from shared.database import get_db, init_db
+from shared.schemas import RegistrationForm, RegistrationResponse, PersonResponse
+from shared.security import get_password_hash
 
 # Configure logging
 structlog.configure(
@@ -26,7 +22,6 @@ structlog.configure(
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
@@ -43,159 +38,28 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="Registration Service",
-    description="User registration and management service",
+    description="User registration and profile management service",
     version="1.0.0"
 )
 
-# Security
-security = HTTPBearer()
-
-# Consul client
-consul_host = os.getenv("CONSUL_HOST", "localhost")
-consul_port = int(os.getenv("CONSUL_PORT", "8500"))
-consul_client = consul.Consul(host=consul_host, port=consul_port)
-
-# Discovery service URL
-discovery_service_url = os.getenv("DISCOVERY_SERVICE_URL", "http://localhost:9090")
-
-class UserManager:
-    """Domain service for user management."""
-    
-    def __init__(self, db: Session):
-        self.db = db
-    
-    def register(self, registration_form: RegistrationForm) -> None:
-        """Register a new user."""
-        try:
-            # Check if username already exists
-            existing_credential = self.db.query(Credential).filter(
-                Credential.username == registration_form.username
-            ).first()
-            
-            if existing_credential:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Username already exists"
-                )
-            
-            # Check if email already exists
-            existing_person = self.db.query(Person).filter(
-                Person.email == registration_form.email
-            ).first()
-            
-            if existing_person:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="Email already exists"
-                )
-        
-            # Create new person
-            person = Person(
-                firstname=registration_form.firstname,
-                lastname=registration_form.lastname,
-                date_of_birth=registration_form.date_of_birth,
-                email=registration_form.email,
-                role_id=getattr(registration_form, 'role_id', 2)  # Use role_id from form or default to Applicant
-            )
-            
-            self.db.add(person)
-            self.db.flush()  # Get the person ID
-            
-            # Create credentials
-            hashed_password = get_password_hash(registration_form.password)
-            credential = Credential(
-                person_id=person.id,
-                username=registration_form.username,
-                password=hashed_password
-            )
-            
-            self.db.add(credential)
-            self.db.commit()
-            
-            logger.info("User registered successfully", username=registration_form.username)
-        except HTTPException:
-            self.db.rollback()
-            raise
-        except Exception as e:
-            self.db.rollback()
-            logger.error("Failed to register user", error=str(e))
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Internal server error"
-            )
-    
-    def get_user_by_id(self, user_id: int, lang: str) -> Person:
-        """Get user by ID."""
-        person = self.db.query(Person).filter(Person.id == user_id).first()
-        if not person:
-            raise ValueError("User not found")
-        return person
-    
-    def validate_user_id(self, user_id: int) -> bool:
-        """Validate if user ID exists."""
-        person = self.db.query(Person).filter(Person.id == user_id).first()
-        return person is not None
-    
-    def get_user_ids_by_name(self, name: str) -> List[int]:
-        """Get user IDs by first name."""
-        persons = self.db.query(Person).filter(Person.firstname == name).all()
-        return [person.id for person in persons]
-    
-    def get_user_and_credentials_by_username(self, username: str) -> dict:
-        """Get user and credentials by username."""
-        credential = self.db.query(Credential).filter(
-            Credential.username == username
-        ).first()
-        
-        if not credential:
-            raise ValueError("User not found")
-        
-        person = credential.person
-        role = person.role
-        
-        return {
-            "username": username,
-            "user_id": person.id,
-            "roles": [role.name]
-        }
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize the registration service."""
     logger.info("Registration service starting up")
     try:
-        # Test Consul connection
-        consul_client.agent.self()
-        logger.info("Successfully connected to Consul", host=consul_host, port=consul_port)
-        
-        # Initialize database (optional)
-        try:
-            init_db()
-            logger.info("Database initialized")
-        except Exception as e:
-            logger.warning("Database initialization failed, continuing without database", error=str(e))
-        
-        # Register service with discovery service
-        service_registration = {
-            "service_name": "registration-service",
-            "service_id": "registration-service-1",
-            "address": "127.0.0.1",
-            "port": 8888,
-            "tags": ["registration", "user-management"]
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{discovery_service_url}/register",
-                json=service_registration
-            )
-            if response.status_code == 200:
-                logger.info("Successfully registered with discovery service")
-            else:
-                logger.warning("Failed to register with discovery service")
-                
+        create_tables()
+        logger.info("Database tables created/verified")
     except Exception as e:
-        logger.warning("Some initialization steps failed, but service will continue", error=str(e))
+        logger.error("Failed to initialize database", error=str(e))
 
 @app.get("/health")
 async def health_check():
@@ -203,114 +67,128 @@ async def health_check():
     return {"status": "healthy", "service": "registration-service"}
 
 @app.post("/register", response_model=RegistrationResponse)
-async def register(
-    registration_form: RegistrationForm,
+async def register_user(
+    user_data: RegistrationForm,
     db: Session = Depends(get_db)
 ):
     """Register a new user."""
     try:
-        user_manager = UserManager(db)
-        user_manager.register(registration_form)
-        return RegistrationResponse(status="CREATED")
-        
-    except ValueError as e:
-        logger.warning("Registration failed", error=str(e))
+        logger.info("Registration attempt", username=user_data.username, email=user_data.email)
+
+        # Check if username already exists
+        existing_credential = db.query(Credential).filter(
+            Credential.username == user_data.username
+        ).first()
+
+        if existing_credential:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username already exists"
+            )
+
+        # Check if email already exists
+        existing_person = db.query(Person).filter(
+            Person.email == user_data.email
+        ).first()
+
+        if existing_person:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered"
+            )
+
+        # Create person record
+        person = Person(
+            firstname=user_data.firstname,
+            lastname=user_data.lastname,
+            date_of_birth=user_data.date_of_birth,
+            email=user_data.email,
+            role_id=user_data.role_id or 2
+        )
+
+        db.add(person)
+        db.flush()  # Get the person ID
+
+        # Create credentials
+        hashed_password = get_password_hash(user_data.password)
+        credential = Credential(
+            person_id=person.id,
+            username=user_data.username,
+            password=hashed_password
+        )
+
+        db.add(credential)
+        db.commit()
+
+        logger.info("User registered successfully", 
+                   person_id=person.id, username=user_data.username)
+
         return RegistrationResponse(
-            status="BAD_REQUEST",
-            errors=[str(e)]
+            status="success",
+            message="User registered successfully"
+        )
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except IntegrityError as e:
+        db.rollback()
+        logger.error("Database integrity error", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Registration failed due to data conflict"
         )
     except Exception as e:
-        logger.error("Unchecked exception during registration", error=str(e))
-        return RegistrationResponse(status="INTERNAL_SERVER_ERROR")
+        db.rollback()
+        logger.error("Registration failed", error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed"
+        )
 
-@app.get("/{lang}/persons/{user_id}", response_model=dict) # Changed response_model to dict as PersonResponse is not defined
-async def get_person_by_id(
-    user_id: int,
-    lang: str,
-    db: Session = Depends(get_db)
-):
-    """Get person by ID."""
+@app.get("/persons/{person_id}", response_model=PersonResponse)
+async def get_person(person_id: int, db: Session = Depends(get_db)):
+    """Get person information by ID."""
     try:
-        user_manager = UserManager(db)
-        person = user_manager.get_user_by_id(user_id, lang)
-        return {
-            "id": person.id,
-            "firstname": person.firstname,
-            "lastname": person.lastname,
-            "date_of_birth": person.date_of_birth,
-            "email": person.email,
-            "role_id": person.role_id
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.error("Failed to get person by ID", error=str(e))
-        raise HTTPException(status_code=500, detail="Internal server error")
+        person = db.query(Person).filter(Person.id == person_id).first()
 
-@app.get("/{lang}/persons/{user_id}/valid")
-async def validate_user_id(
-    user_id: int,
-    lang: str,
-    db: Session = Depends(get_db)
-):
-    """Validate if user ID exists."""
-    try:
-        user_manager = UserManager(db)
-        return user_manager.validate_user_id(user_id)
-    except Exception as e:
-        logger.error("Failed to validate user ID", error=str(e))
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.get("/{lang}/persons")
-async def get_user_ids_by_name(
-    lang: str,
-    name: str,
-    db: Session = Depends(get_db)
-):
-    """Get user IDs by first name."""
-    try:
-        user_manager = UserManager(db)
-        return user_manager.get_user_ids_by_name(name)
-    except Exception as e:
-        logger.error("Failed to get user IDs by name", error=str(e))
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-@app.get("/persons/{username}/details", response_model=dict)
-async def get_user_and_credentials_by_username(
-    username: str,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-):
-    """Get user and credentials by username (service-to-service call)."""
-    try:
-        # Validate token
-        token = credentials.credentials
-        token_data = verify_token(token)
-        
-        if token_data is None:
+        if not person:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Person not found"
             )
-        
-        # Check if user has SERVICE role
-        if "SERVICE" not in token_data.get("roles", []):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions"
-            )
-        
-        user_manager = UserManager(db)
-        return user_manager.get_user_and_credentials_by_username(username)
-        
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+
+        return PersonResponse.from_orm(person)
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to get user details", error=str(e))
-        raise HTTPException(status_code=500, detail="Internal server error")
+        logger.error("Failed to get person", person_id=person_id, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve person information"
+        )
+
+@app.get("/username/{username}")
+async def check_username(username: str, db: Session = Depends(get_db)):
+    """Check if username is available."""
+    try:
+        existing = db.query(Credential).filter(
+            Credential.username == username
+        ).first()
+
+        return {
+            "username": username,
+            "available": existing is None
+        }
+
+    except Exception as e:
+        logger.error("Failed to check username", username=username, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to check username availability"
+        )
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8888) 
+    uvicorn.run(app, host="0.0.0.0", port=8888)

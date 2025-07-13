@@ -1,23 +1,20 @@
 from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import Optional
 import structlog
-import consul
-import httpx
 import os
-import json
-
-# Import shared modules
 import sys
-import os
-# Add the project root to the path
+from datetime import datetime
+
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
-from shared.models import Person, Credential, Role
+
+from shared.database import get_db, create_tables
+from shared.models import Person, Credential
 from shared.schemas import AuthRequest, AuthTokenResponse, AuthFailResponse
-from shared.security import verify_password, create_access_token, verify_token, decode_token
-from shared.database import get_db, init_db
+from shared.security import verify_password, create_access_token, verify_token
 
 # Configure logging
 structlog.configure(
@@ -25,7 +22,6 @@ structlog.configure(
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
@@ -41,109 +37,29 @@ structlog.configure(
 logger = structlog.get_logger()
 
 app = FastAPI(
-    title="Auth Service",
-    description="Authentication and authorization service",
+    title="Authentication Service",
+    description="User authentication and authorization service",
     version="1.0.0"
 )
 
-# Security
-security = HTTPBearer()
-
-# Consul client
-consul_host = os.getenv("CONSUL_HOST", "localhost")
-consul_port = int(os.getenv("CONSUL_PORT", "8500"))
-consul_client = consul.Consul(host=consul_host, port=consul_port)
-
-# Config service URL
-config_service_url = os.getenv("CONFIG_SERVICE_URL", "http://localhost:9999")
-
-# Discovery service URL
-discovery_service_url = os.getenv("DISCOVERY_SERVICE_URL", "http://localhost:9090")
-
-class LoginService:
-    """Service for handling authentication logic."""
-    
-    def __init__(self, db: Session):
-        self.db = db
-    
-    def authenticate_and_get_token(self, username: str, password: str) -> str:
-        """Authenticate user and return JWT token."""
-        # Find user credentials
-        credential = self.db.query(Credential).filter(Credential.username == username).first()
-        if not credential:
-            raise ValueError("User not found")
-        
-        # Verify password
-        if not verify_password(password, credential.password):
-            raise ValueError("Invalid password")
-        
-        # Get user details
-        person = credential.person
-        role = person.role
-        
-        # Create user details for JWT
-        user_details = {
-            "username": username,
-            "user_id": person.id,
-            "roles": [role.name]
-        }
-        
-        # Generate token
-        token = create_access_token(user_details)
-        return token
-    
-    def get_user_details_by_username(self, username: str) -> Optional[dict]:
-        """Get user details by username."""
-        credential = self.db.query(Credential).filter(Credential.username == username).first()
-        if not credential:
-            return None
-        
-        person = credential.person
-        role = person.role
-        
-        return {
-            "username": username,
-            "user_id": person.id,
-            "roles": [role.name]
-        }
+# CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize the auth service."""
-    logger.info("Auth service starting up")
+    """Initialize the authentication service."""
+    logger.info("Authentication service starting up")
     try:
-        # Test Consul connection
-        consul_client.agent.self()
-        logger.info("Successfully connected to Consul", host=consul_host, port=consul_port)
-        
-        # Initialize database (optional)
-        try:
-            init_db()
-            logger.info("Database initialized")
-        except Exception as e:
-            logger.warning("Database initialization failed, continuing without database", error=str(e))
-        
-        # Register service with discovery service
-        service_registration = {
-            "service_name": "auth-service",
-            "service_id": "auth-service-1",
-            "address": "127.0.0.1",
-            "port": 8081,
-            "tags": ["auth", "authentication"]
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                f"{discovery_service_url}/register",
-                json=service_registration
-            )
-            if response.status_code == 200:
-                logger.info("Successfully registered with discovery service")
-            else:
-                logger.warning("Failed to register with discovery service")
-                
+        create_tables()
+        logger.info("Database tables created/verified")
     except Exception as e:
-        logger.warning("Some initialization steps failed, but service will continue", error=str(e))
+        logger.error("Failed to initialize database", error=str(e))
 
 @app.get("/health")
 async def health_check():
@@ -151,133 +67,144 @@ async def health_check():
     return {"status": "healthy", "service": "auth-service"}
 
 @app.post("/auth/login", response_model=AuthTokenResponse)
-async def generate_jwt_token(
+async def login(
     auth_request: AuthRequest,
     db: Session = Depends(get_db)
 ):
-    """Generate JWT token for user login."""
-    logger.info("/login received request")
-    
+    """Authenticate user and return JWT token."""
     try:
-        login_service = LoginService(db)
-        jwt_token = login_service.authenticate_and_get_token(
-            auth_request.username, 
-            auth_request.password
-        )
-        
-        logger.info("Authentication passed and token created!")
-        return AuthTokenResponse(token=jwt_token)
-        
-    except ValueError as e:
-        logger.warning("Authentication failed", error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"message": str(e)}
-        )
-    except Exception as e:
-        logger.warning({"error": str(e), "event": "Authentication failed"})
-        return {"error": str(e), "message": "Authentication failed"}
+        logger.info("Login attempt", username=auth_request.username)
 
-@app.post("/login", response_model=AuthTokenResponse)
-async def generate_jwt_token_alias(
-    auth_request: AuthRequest,
-    db: Session = Depends(get_db)
-):
-    """Alias for /auth/login for compatibility with edge service routing."""
-    logger.info("/login (alias) received request")
-    try:
-        login_service = LoginService(db)
-        jwt_token = login_service.authenticate_and_get_token(
-            auth_request.username, 
-            auth_request.password
-        )
-        logger.info("Authentication passed and token created! (alias)")
-        return AuthTokenResponse(token=jwt_token)
-    except ValueError as e:
-        logger.warning("Authentication failed (alias)", error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"message": str(e)}
-        )
-    except Exception as e:
-        logger.warning({"error": str(e), "event": "Authentication failed (alias)"})
-        return {"error": str(e), "message": "Authentication failed (alias)"}
+        # Get user credentials
+        credential = db.query(Credential).filter(
+            Credential.username == auth_request.username
+        ).first()
 
-@app.get("/auth/validate")
-async def validate_token(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-):
-    """Validate JWT token."""
-    try:
-        token = credentials.credentials
-        token_data = verify_token(token)
-        
-        if token_data is None:
+        if not credential:
+            logger.warning("Login failed - user not found", username=auth_request.username)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token"
+                detail="Invalid username or password"
             )
-        
+
+        # Verify password
+        if not verify_password(auth_request.password, credential.password):
+            logger.warning("Login failed - invalid password", username=auth_request.username)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password"
+            )
+
+        # Get person information
+        person = db.query(Person).filter(Person.id == credential.person_id).first()
+        if not person:
+            logger.error("Login failed - person not found", person_id=credential.person_id)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Authentication error"
+            )
+
+        # Update last login
+        credential.last_login = datetime.utcnow()
+        db.commit()
+
+        # Create JWT token
+        token_data = {
+            "sub": credential.username,
+            "person_id": person.id,
+            "role_id": person.role_id,
+            "email": person.email,
+            "username": credential.username
+        }
+
+        token = create_access_token(token_data)
+
+        logger.info("Login successful", 
+                   username=auth_request.username, 
+                   person_id=person.id,
+                   role_id=person.role_id)
+
+        return AuthTokenResponse(token=token)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Login failed", username=auth_request.username, error=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication error"
+        )
+
+@app.post("/auth/verify")
+async def verify_token_endpoint(token: str):
+    """Verify JWT token and return user information."""
+    try:
+        token_data = verify_token(token)
+
+        if not token_data:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token"
+            )
+
         return {
             "valid": True,
-            "username": token_data['username'],
-            "user_id": token_data['user_id'],
-            "roles": token_data['roles']
+            "data": token_data
         }
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error("Token validation failed", error=str(e))
+        logger.error("Token verification failed", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
+            detail="Token verification failed"
         )
 
-@app.get("/auth/user/{username}/details")
-async def get_user_details(
-    username: str,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-):
-    """Get user details by username (service-to-service call)."""
+@app.get("/auth/me")
+async def get_current_user(token: str, db: Session = Depends(get_db)):
+    """Get current user information from token."""
     try:
-        # Validate token
-        token = credentials.credentials
         token_data = verify_token(token)
-        
-        if token_data is None:
+
+        if not token_data:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token"
+                detail="Invalid or expired token"
             )
-        
-        # Check if user has SERVICE role
-        if "SERVICE" not in token_data['roles']:
+
+        person_id = token_data.get("person_id")
+        if not person_id:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Insufficient permissions"
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token data"
             )
-        
-        login_service = LoginService(db)
-        user_details = login_service.get_user_details_by_username(username)
-        
-        if user_details is None:
+
+        person = db.query(Person).filter(Person.id == person_id).first()
+        if not person:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
-        
-        return user_details
-        
+
+        return {
+            "id": person.id,
+            "firstname": person.firstname,
+            "lastname": person.lastname,
+            "email": person.email,
+            "role_id": person.role_id,
+            "username": token_data.get("username")
+        }
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Failed to get user details", error=str(e))
+        logger.error("Failed to get current user", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error"
+            detail="Failed to retrieve user information"
         )
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8081) 
+    uvicorn.run(app, host="0.0.0.0", port=8081)
