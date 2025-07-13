@@ -1,15 +1,14 @@
 
--- Enhanced Recruitment System Database Schema
+-- Enhanced Recruitment System Database Schema for SQLite
 -- Supports: user management, resume parsing, job posting, candidate matching, 
 -- interview scheduling, offer generation
 
 -- Core user roles
 DROP TABLE IF EXISTS `role`;
 CREATE TABLE `role` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(45) NOT NULL,
-  `description` varchar(255),
-  PRIMARY KEY (`id`)
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` VARCHAR(45) NOT NULL,
+  `description` VARCHAR(255)
 );
 
 -- Insert default roles
@@ -22,45 +21,42 @@ INSERT INTO `role` (`id`, `name`, `description`) VALUES
 -- Person entity
 DROP TABLE IF EXISTS `person`;
 CREATE TABLE `person` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `firstname` varchar(45) DEFAULT NULL,
-  `lastname` varchar(45) DEFAULT NULL,
-  `date_of_birth` date DEFAULT NULL,
-  `email` varchar(100) UNIQUE DEFAULT NULL,
-  `phone` varchar(20) DEFAULT NULL,
-  `address` text DEFAULT NULL,
-  `linkedin_url` varchar(255) DEFAULT NULL,
-  `portfolio_url` varchar(255) DEFAULT NULL,
-  `role_id` int(11) DEFAULT '2',
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `is_active` boolean DEFAULT true,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_person_role` FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `firstname` VARCHAR(45) DEFAULT NULL,
+  `lastname` VARCHAR(45) DEFAULT NULL,
+  `date_of_birth` DATE DEFAULT NULL,
+  `email` VARCHAR(100) UNIQUE DEFAULT NULL,
+  `phone` VARCHAR(20) DEFAULT NULL,
+  `address` TEXT DEFAULT NULL,
+  `linkedin_url` VARCHAR(255) DEFAULT NULL,
+  `portfolio_url` VARCHAR(255) DEFAULT NULL,
+  `role_id` INTEGER DEFAULT 2,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `is_active` BOOLEAN DEFAULT 1,
+  FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 );
 
 -- Credentials
 DROP TABLE IF EXISTS `credential`;
 CREATE TABLE `credential` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `person_id` int(11) NOT NULL,
-  `username` varchar(45) NOT NULL UNIQUE,
-  `password` varchar(255) NOT NULL,
-  `last_login` datetime DEFAULT NULL,
-  `password_reset_token` varchar(255) DEFAULT NULL,
-  `password_reset_expires` datetime DEFAULT NULL,
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_credential_person` FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `person_id` INTEGER NOT NULL,
+  `username` VARCHAR(45) NOT NULL UNIQUE,
+  `password` VARCHAR(255) NOT NULL,
+  `last_login` DATETIME DEFAULT NULL,
+  `password_reset_token` VARCHAR(255) DEFAULT NULL,
+  `password_reset_expires` DATETIME DEFAULT NULL,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
 -- Job categories
 DROP TABLE IF EXISTS `job_category`;
 CREATE TABLE `job_category` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `description` text,
-  PRIMARY KEY (`id`)
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` VARCHAR(100) NOT NULL,
+  `description` TEXT
 );
 
 INSERT INTO `job_category` (`name`, `description`) VALUES
@@ -76,37 +72,35 @@ INSERT INTO `job_category` (`name`, `description`) VALUES
 -- Job postings
 DROP TABLE IF EXISTS `job_posting`;
 CREATE TABLE `job_posting` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `title` varchar(255) NOT NULL,
-  `description` text NOT NULL,
-  `requirements` text,
-  `responsibilities` text,
-  `salary_min` decimal(10,2) DEFAULT NULL,
-  `salary_max` decimal(10,2) DEFAULT NULL,
-  `currency` varchar(3) DEFAULT 'USD',
-  `location` varchar(255),
-  `remote_allowed` boolean DEFAULT false,
-  `employment_type` enum('full-time', 'part-time', 'contract', 'internship') DEFAULT 'full-time',
-  `experience_level` enum('entry', 'mid', 'senior', 'executive') DEFAULT 'mid',
-  `category_id` int(11),
-  `posted_by` int(11) NOT NULL,
-  `status` enum('draft', 'active', 'closed', 'on-hold') DEFAULT 'draft',
-  `application_deadline` date,
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_job_category` FOREIGN KEY (`category_id`) REFERENCES `job_category` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_job_poster` FOREIGN KEY (`posted_by`) REFERENCES `person` (`id`) ON DELETE CASCADE
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `title` VARCHAR(255) NOT NULL,
+  `description` TEXT NOT NULL,
+  `requirements` TEXT,
+  `responsibilities` TEXT,
+  `salary_min` DECIMAL(10,2) DEFAULT NULL,
+  `salary_max` DECIMAL(10,2) DEFAULT NULL,
+  `currency` VARCHAR(3) DEFAULT 'USD',
+  `location` VARCHAR(255),
+  `remote_allowed` BOOLEAN DEFAULT 0,
+  `employment_type` VARCHAR(20) DEFAULT 'full-time',
+  `experience_level` VARCHAR(20) DEFAULT 'mid',
+  `category_id` INTEGER,
+  `posted_by` INTEGER NOT NULL,
+  `status` VARCHAR(20) DEFAULT 'draft',
+  `application_deadline` DATE,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`category_id`) REFERENCES `job_category` (`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`posted_by`) REFERENCES `person` (`id`) ON DELETE CASCADE
 );
 
 -- Competences/Skills
 DROP TABLE IF EXISTS `competence`;
 CREATE TABLE `competence` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `category` varchar(50) DEFAULT NULL,
-  `description` text,
-  PRIMARY KEY (`id`)
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` VARCHAR(100) NOT NULL,
+  `category` VARCHAR(50) DEFAULT NULL,
+  `description` TEXT
 );
 
 INSERT INTO `competence` (`name`, `category`, `description`) VALUES
@@ -124,40 +118,37 @@ INSERT INTO `competence` (`name`, `category`, `description`) VALUES
 -- Resumes
 DROP TABLE IF EXISTS `resume`;
 CREATE TABLE `resume` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `person_id` int(11) NOT NULL,
-  `file_path` varchar(500),
-  `file_name` varchar(255),
-  `file_size` bigint,
-  `content_text` longtext,
-  `parsed_data` json,
-  `upload_date` datetime DEFAULT CURRENT_TIMESTAMP,
-  `is_primary` boolean DEFAULT false,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_resume_person` FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `person_id` INTEGER NOT NULL,
+  `file_path` VARCHAR(500),
+  `file_name` VARCHAR(255),
+  `file_size` BIGINT,
+  `content_text` TEXT,
+  `parsed_data` TEXT,
+  `upload_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `is_primary` BOOLEAN DEFAULT 0,
+  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
 );
 
 -- Availability
 DROP TABLE IF EXISTS `availability`;
 CREATE TABLE `availability` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `person_id` int(11) NOT NULL,
-  `from_date` date NOT NULL,
-  `to_date` date NOT NULL,
-  `is_flexible` boolean DEFAULT false,
-  `notes` text,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_availability_person` FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `person_id` INTEGER NOT NULL,
+  `from_date` DATE NOT NULL,
+  `to_date` DATE NOT NULL,
+  `is_flexible` BOOLEAN DEFAULT 0,
+  `notes` TEXT,
+  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
 );
 
 -- Application status
 DROP TABLE IF EXISTS `status`;
 CREATE TABLE `status` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(45) NOT NULL,
-  `description` varchar(255),
-  `order_index` int DEFAULT 0,
-  PRIMARY KEY (`id`)
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` VARCHAR(45) NOT NULL,
+  `description` VARCHAR(255),
+  `order_index` INTEGER DEFAULT 0
 );
 
 INSERT INTO `status` (`id`, `name`, `description`, `order_index`) VALUES
@@ -174,48 +165,45 @@ INSERT INTO `status` (`id`, `name`, `description`, `order_index`) VALUES
 -- Job applications
 DROP TABLE IF EXISTS `application`;
 CREATE TABLE `application` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `person_id` int(11) NOT NULL,
-  `job_posting_id` int(11) NOT NULL,
-  `resume_id` int(11),
-  `cover_letter` text,
-  `date_of_registration` datetime DEFAULT CURRENT_TIMESTAMP,
-  `status_id` int(11) DEFAULT 0,
-  `match_score` decimal(5,2) DEFAULT NULL,
-  `notes` text,
-  `last_updated` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_person_job` (`person_id`, `job_posting_id`),
-  CONSTRAINT `fk_application_person` FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_application_job` FOREIGN KEY (`job_posting_id`) REFERENCES `job_posting` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_application_resume` FOREIGN KEY (`resume_id`) REFERENCES `resume` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `fk_application_status` FOREIGN KEY (`status_id`) REFERENCES `status` (`id`) ON DELETE SET NULL
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `person_id` INTEGER NOT NULL,
+  `job_posting_id` INTEGER NOT NULL,
+  `resume_id` INTEGER,
+  `cover_letter` TEXT,
+  `date_of_registration` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `status_id` INTEGER DEFAULT 0,
+  `match_score` DECIMAL(5,2) DEFAULT NULL,
+  `notes` TEXT,
+  `last_updated` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(`person_id`, `job_posting_id`),
+  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`job_posting_id`) REFERENCES `job_posting` (`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`resume_id`) REFERENCES `resume` (`id`) ON DELETE SET NULL,
+  FOREIGN KEY (`status_id`) REFERENCES `status` (`id`) ON DELETE SET NULL
 );
 
 -- Competence profiles for applications
 DROP TABLE IF EXISTS `competence_profile`;
 CREATE TABLE `competence_profile` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `application_id` int(11) DEFAULT NULL,
-  `person_id` int(11) DEFAULT NULL,
-  `competence_id` int(11) NOT NULL,
-  `years_of_experience` decimal(4,2) DEFAULT NULL,
-  `proficiency_level` enum('beginner', 'intermediate', 'advanced', 'expert') DEFAULT 'intermediate',
-  `verified` boolean DEFAULT false,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_competence_profile_application` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_competence_profile_person` FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_competence_profile_competence` FOREIGN KEY (`competence_id`) REFERENCES `competence` (`id`) ON DELETE CASCADE
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `application_id` INTEGER DEFAULT NULL,
+  `person_id` INTEGER DEFAULT NULL,
+  `competence_id` INTEGER NOT NULL,
+  `years_of_experience` DECIMAL(4,2) DEFAULT NULL,
+  `proficiency_level` VARCHAR(20) DEFAULT 'intermediate',
+  `verified` BOOLEAN DEFAULT 0,
+  FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`competence_id`) REFERENCES `competence` (`id`) ON DELETE CASCADE
 );
 
 -- Interview types
 DROP TABLE IF EXISTS `interview_type`;
 CREATE TABLE `interview_type` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `description` text,
-  `duration_minutes` int DEFAULT 60,
-  PRIMARY KEY (`id`)
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `name` VARCHAR(100) NOT NULL,
+  `description` TEXT,
+  `duration_minutes` INTEGER DEFAULT 60
 );
 
 INSERT INTO `interview_type` (`name`, `description`, `duration_minutes`) VALUES
@@ -228,85 +216,80 @@ INSERT INTO `interview_type` (`name`, `description`, `duration_minutes`) VALUES
 -- Interview scheduling
 DROP TABLE IF EXISTS `interview`;
 CREATE TABLE `interview` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `application_id` int(11) NOT NULL,
-  `interview_type_id` int(11) NOT NULL,
-  `interviewer_id` int(11) NOT NULL,
-  `scheduled_date` datetime NOT NULL,
-  `duration_minutes` int DEFAULT 60,
-  `location` varchar(255),
-  `meeting_link` varchar(500),
-  `status` enum('scheduled', 'completed', 'cancelled', 'rescheduled') DEFAULT 'scheduled',
-  `feedback` text,
-  `rating` int CHECK (rating >= 1 AND rating <= 5),
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_interview_application` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_interview_type` FOREIGN KEY (`interview_type_id`) REFERENCES `interview_type` (`id`),
-  CONSTRAINT `fk_interview_interviewer` FOREIGN KEY (`interviewer_id`) REFERENCES `person` (`id`)
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `application_id` INTEGER NOT NULL,
+  `interview_type_id` INTEGER NOT NULL,
+  `interviewer_id` INTEGER NOT NULL,
+  `scheduled_date` DATETIME NOT NULL,
+  `duration_minutes` INTEGER DEFAULT 60,
+  `location` VARCHAR(255),
+  `meeting_link` VARCHAR(500),
+  `status` VARCHAR(20) DEFAULT 'scheduled',
+  `feedback` TEXT,
+  `rating` INTEGER CHECK (rating >= 1 AND rating <= 5),
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`interview_type_id`) REFERENCES `interview_type` (`id`),
+  FOREIGN KEY (`interviewer_id`) REFERENCES `person` (`id`)
 );
 
 -- Job offers
 DROP TABLE IF EXISTS `job_offer`;
 CREATE TABLE `job_offer` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `application_id` int(11) NOT NULL,
-  `salary_offered` decimal(10,2) NOT NULL,
-  `currency` varchar(3) DEFAULT 'USD',
-  `benefits` text,
-  `start_date` date,
-  `offer_letter_path` varchar(500),
-  `expiry_date` date,
-  `status` enum('draft', 'sent', 'accepted', 'rejected', 'expired') DEFAULT 'draft',
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_offer_application` FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `application_id` INTEGER NOT NULL,
+  `salary_offered` DECIMAL(10,2) NOT NULL,
+  `currency` VARCHAR(3) DEFAULT 'USD',
+  `benefits` TEXT,
+  `start_date` DATE,
+  `offer_letter_path` VARCHAR(500),
+  `expiry_date` DATE,
+  `status` VARCHAR(20) DEFAULT 'draft',
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE
 );
 
 -- Candidate matching scores
 DROP TABLE IF EXISTS `candidate_match`;
 CREATE TABLE `candidate_match` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `job_posting_id` int(11) NOT NULL,
-  `person_id` int(11) NOT NULL,
-  `overall_score` decimal(5,2) NOT NULL,
-  `skills_score` decimal(5,2),
-  `experience_score` decimal(5,2),
-  `education_score` decimal(5,2),
-  `location_score` decimal(5,2),
-  `calculated_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_job_person_match` (`job_posting_id`, `person_id`),
-  CONSTRAINT `fk_match_job` FOREIGN KEY (`job_posting_id`) REFERENCES `job_posting` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_match_person` FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `job_posting_id` INTEGER NOT NULL,
+  `person_id` INTEGER NOT NULL,
+  `overall_score` DECIMAL(5,2) NOT NULL,
+  `skills_score` DECIMAL(5,2),
+  `experience_score` DECIMAL(5,2),
+  `education_score` DECIMAL(5,2),
+  `location_score` DECIMAL(5,2),
+  `calculated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(`job_posting_id`, `person_id`),
+  FOREIGN KEY (`job_posting_id`) REFERENCES `job_posting` (`id`) ON DELETE CASCADE,
+  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
 );
 
 -- System notifications
 DROP TABLE IF EXISTS `notification`;
 CREATE TABLE `notification` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `recipient_id` int(11) NOT NULL,
-  `title` varchar(255) NOT NULL,
-  `message` text NOT NULL,
-  `type` enum('info', 'success', 'warning', 'error') DEFAULT 'info',
-  `read_status` boolean DEFAULT false,
-  `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
-  `read_at` datetime DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `fk_notification_recipient` FOREIGN KEY (`recipient_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `recipient_id` INTEGER NOT NULL,
+  `title` VARCHAR(255) NOT NULL,
+  `message` TEXT NOT NULL,
+  `type` VARCHAR(20) DEFAULT 'info',
+  `read_status` BOOLEAN DEFAULT 0,
+  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `read_at` DATETIME DEFAULT NULL,
+  FOREIGN KEY (`recipient_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
 );
 
 -- System configuration
 DROP TABLE IF EXISTS `system_config`;
 CREATE TABLE `system_config` (
-  `id` int(11) NOT NULL AUTO_INCREMENT,
-  `config_key` varchar(100) NOT NULL UNIQUE,
-  `config_value` text,
-  `description` varchar(255),
-  `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`)
+  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
+  `config_key` VARCHAR(100) NOT NULL UNIQUE,
+  `config_value` TEXT,
+  `description` VARCHAR(255),
+  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 INSERT INTO `system_config` (`config_key`, `config_value`, `description`) VALUES

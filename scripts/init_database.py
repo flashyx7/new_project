@@ -9,7 +9,6 @@ import sys
 import sqlite3
 import structlog
 from datetime import datetime, date, timedelta
-import hashlib
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -42,6 +41,11 @@ def init_database():
     db_path = "recruitment_system.db"
     
     try:
+        # Remove existing database to start fresh
+        if os.path.exists(db_path):
+            os.remove(db_path)
+            logger.info("Removed existing database file")
+        
         # Connect to database
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -53,14 +57,13 @@ def init_database():
         if os.path.exists(schema_path):
             with open(schema_path, 'r') as f:
                 schema_sql = f.read()
-                # Execute schema in parts (SQLite doesn't handle multiple statements well)
-                for statement in schema_sql.split(';'):
-                    if statement.strip():
-                        try:
-                            cursor.execute(statement)
-                        except Exception as e:
-                            if "already exists" not in str(e).lower():
-                                logger.warning("Schema statement failed", statement=statement[:100], error=str(e))
+                
+            # Execute the entire schema at once for SQLite
+            cursor.executescript(schema_sql)
+            logger.info("Schema executed successfully")
+        else:
+            logger.error("Schema file not found", path=schema_path)
+            return False
         
         # Create sample users
         sample_users = [
@@ -103,11 +106,6 @@ def init_database():
         ]
         
         for user in sample_users:
-            # Check if user already exists
-            cursor.execute("SELECT id FROM person WHERE email = ?", (user['email'],))
-            if cursor.fetchone():
-                continue
-                
             # Insert person
             cursor.execute("""
                 INSERT INTO person (firstname, lastname, email, date_of_birth, role_id, phone, address)
@@ -132,12 +130,12 @@ def init_database():
             {
                 'title': 'Senior Python Developer',
                 'description': 'We are looking for an experienced Python developer to join our backend team.',
-                'requirements': 'Python, FastAPI, PostgreSQL, 5+ years experience',
+                'requirements': 'Python, FastAPI, SQLite, 5+ years experience',
                 'responsibilities': 'Develop and maintain backend services, mentor junior developers',
                 'salary_min': 90000,
                 'salary_max': 120000,
                 'location': 'San Francisco, CA',
-                'remote_allowed': True,
+                'remote_allowed': 1,
                 'employment_type': 'full-time',
                 'experience_level': 'senior',
                 'category_id': 1,
@@ -153,7 +151,7 @@ def init_database():
                 'salary_min': 70000,
                 'salary_max': 95000,
                 'location': 'Remote',
-                'remote_allowed': True,
+                'remote_allowed': 1,
                 'employment_type': 'full-time',
                 'experience_level': 'mid',
                 'category_id': 1,
@@ -165,7 +163,7 @@ def init_database():
         
         for job in sample_jobs:
             cursor.execute("""
-                INSERT OR IGNORE INTO job_posting 
+                INSERT INTO job_posting 
                 (title, description, requirements, responsibilities, salary_min, salary_max, 
                  currency, location, remote_allowed, employment_type, experience_level, 
                  category_id, posted_by, status, application_deadline)
@@ -179,18 +177,17 @@ def init_database():
         
         # Create sample application
         cursor.execute("""
-            INSERT OR IGNORE INTO availability (person_id, from_date, to_date, is_flexible)
-            VALUES (3, ?, ?, ?)
+            INSERT INTO availability (person_id, from_date, to_date, is_flexible)
+            VALUES (?, ?, ?, ?)
         """, (
+            3,  # John Candidate
             (datetime.now() + timedelta(days=14)).strftime('%Y-%m-%d'),
             (datetime.now() + timedelta(days=365)).strftime('%Y-%m-%d'),
-            True
+            1
         ))
         
-        availability_id = cursor.lastrowid or 1
-        
         cursor.execute("""
-            INSERT OR IGNORE INTO application 
+            INSERT INTO application 
             (person_id, job_posting_id, cover_letter, status_id, match_score)
             VALUES (?, ?, ?, ?, ?)
         """, (
@@ -208,7 +205,7 @@ def init_database():
         
         for person_id, competence_id, years, level in competence_data:
             cursor.execute("""
-                INSERT OR IGNORE INTO competence_profile 
+                INSERT INTO competence_profile 
                 (person_id, competence_id, years_of_experience, proficiency_level)
                 VALUES (?, ?, ?, ?)
             """, (person_id, competence_id, years, level))
@@ -233,6 +230,8 @@ def init_database():
         
     except Exception as e:
         logger.error("Database initialization failed", error=str(e))
+        import traceback
+        traceback.print_exc()
         return False
     finally:
         if 'conn' in locals():

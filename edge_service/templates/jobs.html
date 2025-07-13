@@ -1,0 +1,112 @@
+
+{% extends "base.html" %}
+
+{% block title %}Available Jobs{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-12">
+            <h1>Available Positions</h1>
+            <p class="text-muted">Explore exciting career opportunities</p>
+        </div>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-danger" role="alert">
+        {{ error }}
+    </div>
+    {% endif %}
+
+    <div class="row mt-4">
+        {% if jobs %}
+            {% for job in jobs %}
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">{{ job[1] }}</h5>
+                        <span class="badge badge-primary">{{ job[8] or 'General' }}</span>
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">{{ job[2][:150] }}{% if job[2]|length > 150 %}...{% endif %}</p>
+                        
+                        <div class="job-details">
+                            <p><strong>Location:</strong> {{ job[3] or 'Not specified' }}</p>
+                            <p><strong>Type:</strong> {{ job[6].title() if job[6] else 'Full-time' }}</p>
+                            <p><strong>Level:</strong> {{ job[7].title() if job[7] else 'Mid' }}</p>
+                            {% if job[4] and job[5] %}
+                            <p><strong>Salary:</strong> ${{ "{:,.0f}".format(job[4]) }} - ${{ "{:,.0f}".format(job[5]) }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="card-footer">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-info btn-sm" 
+                                    onclick="viewJobDetails({{ job[0] }})">
+                                View Details
+                            </button>
+                            {% if user and user.role_id == 2 %}
+                            <button type="button" class="btn btn-primary btn-sm"
+                                    onclick="applyForJob({{ job[0] }})">
+                                Apply Now
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="col-md-12">
+                <div class="alert alert-info" role="alert">
+                    <h4 class="alert-heading">No Jobs Available</h4>
+                    <p>There are currently no active job postings. Please check back later!</p>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Job Details Modal -->
+<div class="modal fade" id="jobDetailsModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="jobModalTitle">Job Details</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body" id="jobModalBody">
+                Loading...
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                {% if user and user.role_id == 2 %}
+                <button type="button" class="btn btn-primary" id="applyFromModalBtn">Apply Now</button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function viewJobDetails(jobId) {
+    // In a real implementation, this would fetch job details via API
+    $('#jobDetailsModal').modal('show');
+    $('#jobModalBody').html('<p>Detailed job information would be loaded here...</p>');
+}
+
+function applyForJob(jobId) {
+    {% if user %}
+        if (confirm('Are you sure you want to apply for this position?')) {
+            // In a real implementation, this would submit the application
+            alert('Application submitted successfully!');
+        }
+    {% else %}
+        alert('Please log in to apply for jobs.');
+        window.location.href = '/login';
+    {% endif %}
+}
+</script>
+{% endblock %}

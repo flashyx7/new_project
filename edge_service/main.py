@@ -1,26 +1,26 @@
-from fastapi import FastAPI, HTTPException, Depends, Request, Response
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.middleware.cors import CORSMiddleware
+"""
+Edge Service - Main entry point for the Recruitment System
+Handles routing, authentication, and serves the web interface
+"""
+
+import os
+import sys
+import uvicorn
+from fastapi import FastAPI, Request, Depends, HTTPException, Form, File, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, JSONResponse
-from typing import Dict, Any, Optional
-import structlog
-import consul
+from fastapi.middleware.cors import CORSMiddleware
 import httpx
-import os
-import json
-import time
-from datetime import datetime, timedelta
-import asyncio
+import structlog
+from datetime import datetime
+import sqlite3
 
-# Import shared modules
-import sys
-import os
-# Add the project root to the path
+# Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
-from shared.security import verify_token
+
+from shared.security import verify_password, create_access_token, verify_token
 
 # Configure logging
 structlog.configure(
@@ -28,7 +28,6 @@ structlog.configure(
         structlog.stdlib.filter_by_level,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
-        structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
@@ -43,16 +42,14 @@ structlog.configure(
 
 logger = structlog.get_logger()
 
+# FastAPI app
 app = FastAPI(
-    title="Edge Service",
-    description="API Gateway and routing service",
+    title="Recruitment System",
+    description="Edge Service for Recruitment Tracking System",
     version="1.0.0"
 )
 
-# Security
-security = HTTPBearer(auto_error=False)
-
-# CORS middleware
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -61,488 +58,300 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Consul client
-consul_host = os.getenv("CONSUL_HOST", "localhost")
-consul_port = int(os.getenv("CONSUL_PORT", "8500"))
-consul_client = consul.Consul(host=consul_host, port=consul_port)
+# Static files and templates
+app.mount("/static", StaticFiles(directory="edge_service/static"), name="static")
+templates = Jinja2Templates(directory="edge_service/templates")
 
-# Discovery service URL
-discovery_service_url = os.getenv("DISCOVERY_SERVICE_URL", "http://localhost:9090")
+# Database helper functions
+def get_db_connection():
+    """Get database connection."""
+    return sqlite3.connect("recruitment_system.db")
 
-# Service routing configuration
-SERVICE_ROUTES = {
-    "auth-service": {
-        "prefix": "/auth",
-        "target_path": "/auth",
-        "host": "localhost",
-        "port": 8081
-    },
-    "registration-service": {
-        "prefix": "/registration",
-        "target_path": "/",
-        "host": "localhost", 
-        "port": 8888
-    },
-    "job-application-service": {
-        "prefix": "/jobapplications",
-        "target_path": "/",
-        "host": "localhost",
-        "port": 8082
-    }
-}
+def authenticate_user(username: str, password: str):
+    """Authenticate user credentials."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-class CircuitBreaker:
-    """Simple circuit breaker implementation."""
+        cursor.execute("""
+            SELECT c.id, c.person_id, c.username, c.password, p.firstname, p.lastname, p.email, p.role_id
+            FROM credential c
+            JOIN person p ON c.person_id = p.id
+            WHERE c.username = ?
+        """, (username,))
 
-    def __init__(self, failure_threshold=5, recovery_timeout=60):
-        self.failure_threshold = failure_threshold
-        self.recovery_timeout = recovery_timeout
-        self.failure_count = 0
-        self.last_failure_time = None
-        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+        user = cursor.fetchone()
+        conn.close()
 
-    def call(self, func, *args, **kwargs):
-        """Execute function with circuit breaker protection."""
-        if self.state == "OPEN":
-            if time.time() - self.last_failure_time > self.recovery_timeout:
-                self.state = "HALF_OPEN"
-                logger.info("Circuit breaker transitioning to HALF_OPEN")
-            else:
-                raise HTTPException(
-                    status_code=503,
-                    detail="Service temporarily unavailable"
-                )
+        if user and verify_password(password, user[3]):
+            return {
+                "id": user[0],
+                "person_id": user[1],
+                "username": user[2],
+                "firstname": user[4],
+                "lastname": user[5],
+                "email": user[6],
+                "role_id": user[7]
+            }
+        return None
 
+    except Exception as e:
+        logger.error("Authentication failed", error=str(e))
+        return None
+
+def get_current_user(request: Request):
+    """Get current user from session or token."""
+    # Check session first
+    user_id = request.session.get("user_id")
+    if user_id:
         try:
-            result = func(*args, **kwargs)
-            if self.state == "HALF_OPEN":
-                self.state = "CLOSED"
-                self.failure_count = 0
-                logger.info("Circuit breaker reset to CLOSED")
-            return result
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                SELECT c.id, c.person_id, c.username, p.firstname, p.lastname, p.email, p.role_id
+                FROM credential c
+                JOIN person p ON c.person_id = p.id
+                WHERE c.id = ?
+            """, (user_id,))
+
+            user = cursor.fetchone()
+            conn.close()
+
+            if user:
+                return {
+                    "id": user[0],
+                    "person_id": user[1],
+                    "username": user[2],
+                    "firstname": user[3],
+                    "lastname": user[4],
+                    "email": user[5],
+                    "role_id": user[6]
+                }
         except Exception as e:
-            self.failure_count += 1
-            self.last_failure_time = time.time()
+            logger.error("User lookup failed", error=str(e))
 
-            if self.failure_count >= self.failure_threshold:
-                self.state = "OPEN"
-                logger.warning("Circuit breaker opened", failure_count=self.failure_count)
-
-            raise e
-
-class ServiceDiscovery:
-    """Service discovery and routing with circuit breaker."""
-
-    def __init__(self):
-        self.service_cache = {}
-        self.circuit_breakers = {}
-        self.cache_ttl = 30  # seconds
-
-    async def get_service_instance(self, service_name: str) -> Optional[Dict[str, Any]]:
-        """Get service instance from discovery service with caching."""
-        current_time = time.time()
-
-        # Check cache first
-        if service_name in self.service_cache:
-            cache_entry = self.service_cache[service_name]
-            if current_time - cache_entry["timestamp"] < self.cache_ttl:
-                return cache_entry["instance"]
-
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(f"{discovery_service_url}/services/{service_name}")
-                if response.status_code == 200:
-                    data = response.json()
-                    instances = data.get("instances", [])
-                    if instances:
-                        instance = instances[0]
-                        # Cache the result
-                        self.service_cache[service_name] = {
-                            "instance": instance,
-                            "timestamp": current_time
-                        }
-                        return instance
-            return None
-        except Exception as e:
-            logger.error("Failed to get service instance", service_name=service_name, error=str(e))
-            return None
-
-    async def route_request(self, service_name: str, path: str, method: str, 
-                          headers: Dict, body: Optional[bytes] = None) -> Response:
-        """Route request to appropriate service with circuit breaker."""
-        # Get or create circuit breaker for this service
-        if service_name not in self.circuit_breakers:
-            self.circuit_breakers[service_name] = CircuitBreaker()
-
-        circuit_breaker = self.circuit_breakers[service_name]
-
-        def make_request():
-            return asyncio.create_task(self._make_request(service_name, path, method, headers, body))
-
-        try:
-            result = await circuit_breaker.call(make_request)
-            return result
-        except Exception as e:
-            logger.error("Request routing failed", service_name=service_name, error=str(e))
-            raise HTTPException(status_code=503, detail="Service unavailable")
-
-    async def _make_request(self, service_name: str, path: str, method: str, 
-                          headers: Dict, body: Optional[bytes] = None) -> Response:
-        """Make the actual HTTP request to the service."""
-        # Get the route configuration
-        route_config = SERVICE_ROUTES.get(service_name, {})
-        if not route_config:
-            raise HTTPException(status_code=404, detail=f"Service {service_name} not found")
-
-        target_path = route_config.get("target_path", "/")
-        host = route_config.get("host", "localhost")
-        port = route_config.get("port", 80)
-
-        # Construct the target URL
-        service_path = path[len(route_config['prefix']):] if path.startswith(route_config['prefix']) else path
-        if not service_path.startswith('/'):
-            service_path = '/' + service_path
-
-        # Use target_path if specified, otherwise use service_path
-        if target_path and target_path != "/":
-            final_path = target_path + service_path
-        else:
-            final_path = service_path
-
-        target_url = f"http://{host}:{port}{final_path}"
-
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.request(
-                    method=method,
-                    url=target_url,
-                    headers=headers,
-                    content=body
-                )
-
-                return Response(
-                    content=response.content,
-                    status_code=response.status_code,
-                    headers=dict(response.headers)
-                )
-        except httpx.TimeoutException:
-            logger.error("Request timeout", service_name=service_name, url=target_url)
-            raise HTTPException(status_code=504, detail="Gateway timeout")
-        except httpx.ConnectError:
-            logger.error("Connection error", service_name=service_name, url=target_url)
-            raise HTTPException(status_code=503, detail="Service unavailable")
-        except Exception as e:
-            logger.error("Request failed", service_name=service_name, error=str(e))
-            raise HTTPException(status_code=500, detail="Internal gateway error")
-
-service_discovery = ServiceDiscovery()
-
-def get_service_name_from_path(path: str) -> Optional[str]:
-    """Extract service name from request path."""
-    for service_name, route_config in SERVICE_ROUTES.items():
-        if path.startswith(route_config["prefix"]):
-            return service_name
     return None
 
-async def route_to_service(service_name: str, path: str, method: str, 
-                          headers: Dict, body: Optional[bytes] = None) -> Response:
-    """Route request to appropriate service."""
-    # Get the route configuration
-    route_config = SERVICE_ROUTES.get(service_name, {})
-    if not route_config:
-        raise HTTPException(status_code=404, detail=f"Service {service_name} not found")
+# Routes
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request):
+    """Home page."""
+    user = get_current_user(request)
+    return templates.TemplateResponse("index.html", {"request": request, "user": user})
 
-    target_path = route_config.get("target_path", "/")
-    host = route_config.get("host", "localhost")
-    port = route_config.get("port", 80)
+@app.get("/login", response_class=HTMLResponse)
+async def login_page(request: Request):
+    """Login page."""
+    return templates.TemplateResponse("login.html", {"request": request})
 
-    # Construct the target URL
-    service_path = path[len(route_config['prefix']):] if path.startswith(route_config['prefix']) else path
-    if not service_path.startswith('/'):
-        service_path = '/' + service_path
+@app.post("/login")
+async def login(request: Request, username: str = Form(...), password: str = Form(...)):
+    """Handle login."""
+    user = authenticate_user(username, password)
 
-    # Use target_path if specified, otherwise use service_path
-    if target_path and target_path != "/":
-        final_path = target_path + service_path
-    else:
-        final_path = service_path
+    if not user:
+        return templates.TemplateResponse("login.html", {
+            "request": request, 
+            "error": "Invalid username or password"
+        })
 
-    target_url = f"http://{host}:{port}{final_path}"
+    # Create session
+    request.session["user_id"] = user["id"]
+    request.session["username"] = user["username"]
 
+    # Redirect to dashboard
+    return RedirectResponse(url="/dashboard", status_code=302)
+
+@app.get("/register", response_class=HTMLResponse)
+async def register_page(request: Request):
+    """Registration page."""
+    return templates.TemplateResponse("register.html", {"request": request})
+
+@app.post("/register")
+async def register(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    email: str = Form(...),
+    firstname: str = Form(...),
+    lastname: str = Form(...)
+):
+    """Handle registration."""
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.request(
-                method=method,
-                url=target_url,
-                headers=headers,
-                content=body
-            )
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-            return Response(
-                content=response.content,
-                status_code=response.status_code,
-                headers=dict(response.headers)
-            )
-    except httpx.TimeoutException:
-        logger.error("Request timeout", service_name=service_name, url=target_url)
-        raise HTTPException(status_code=504, detail="Gateway timeout")
-    except httpx.ConnectError:
-        logger.error("Connection error", service_name=service_name, url=target_url)
-        raise HTTPException(status_code=503, detail="Service unavailable")
-    except Exception as e:
-        logger.error("Request failed", service_name=service_name, error=str(e))
-        raise HTTPException(status_code=500, detail="Internal gateway error")
+        # Check if username or email already exists
+        cursor.execute("SELECT id FROM credential WHERE username = ?", (username,))
+        if cursor.fetchone():
+            conn.close()
+            return templates.TemplateResponse("register.html", {
+                "request": request,
+                "error": "Username already exists"
+            })
 
-def validate_token_dependency(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
-    """Validate JWT token if present."""
-    if credentials:
-        try:
-            token = credentials.credentials
-            token_data = verify_token(token)
-            if token_data is None:
-                raise HTTPException(status_code=401, detail="Invalid token")
-            return token_data
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.error("Token validation failed", error=str(e))
-            raise HTTPException(status_code=401, detail="Authentication failed")
-    return None
+        cursor.execute("SELECT id FROM person WHERE email = ?", (email,))
+        if cursor.fetchone():
+            conn.close()
+            return templates.TemplateResponse("register.html", {
+                "request": request,
+                "error": "Email already exists"
+            })
 
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    """Log all incoming requests."""
-    start_time = time.time()
+        # Create person
+        cursor.execute("""
+            INSERT INTO person (firstname, lastname, email, role_id)
+            VALUES (?, ?, ?, ?)
+        """, (firstname, lastname, email, 2))  # Default to Applicant role
 
-    # Log request
-    logger.info("Incoming request",
-               method=request.method,
-               url=str(request.url),
-               client_ip=request.client.host if request.client else None)
+        person_id = cursor.lastrowid
 
-    try:
-        response = await call_next(request)
+        # Create credential
+        from shared.security import get_password_hash
+        hashed_password = get_password_hash(password)
+        cursor.execute("""
+            INSERT INTO credential (person_id, username, password)
+            VALUES (?, ?, ?)
+        """, (person_id, username, hashed_password))
 
-        # Log response
-        process_time = time.time() - start_time
-        logger.info("Request completed",
-                   method=request.method,
-                   url=str(request.url),
-                   status_code=response.status_code,
-                   process_time=process_time)
+        conn.commit()
+        conn.close()
 
-        return response
-    except Exception as e:
-        # Log error
-        process_time = time.time() - start_time
-        logger.error("Request failed",
-                    method=request.method,
-                    url=str(request.url),
-                    error=str(e),
-                    process_time=process_time)
-        raise
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize the edge service."""
-    logger.info("Edge service starting up")
-    try:
-        # Test Consul connection
-        consul_client.agent.self()
-        logger.info("Successfully connected to Consul", host=consul_host, port=consul_port)
-
-        # Register service with discovery service
-        service_registration = {
-            "service_name": "edge-service",
-            "service_id": "edge-service-1",
-            "address": "127.0.0.1",
-            "port": 8080,
-            "tags": ["edge", "gateway", "routing"]
-        }
-
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                f"{discovery_service_url}/register",
-                json=service_registration
-            )
-            if response.status_code == 200:
-                logger.info("Successfully registered with discovery service")
-            else:
-                logger.warning("Failed to register with discovery service", status_code=response.status_code)
+        return RedirectResponse(url="/login?message=Registration successful", status_code=302)
 
     except Exception as e:
-        logger.warning("Startup: Could not register with discovery service", error=str(e))
+        logger.error("Registration failed", error=str(e))
+        return templates.TemplateResponse("register.html", {
+            "request": request,
+            "error": "Registration failed. Please try again."
+        })
+
+@app.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request):
+    """Dashboard page."""
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Get statistics
+        cursor.execute("SELECT COUNT(*) FROM job_posting WHERE status = 'active'")
+        active_jobs = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM application")
+        total_applications = cursor.fetchone()[0]
+
+        cursor.execute("SELECT COUNT(*) FROM person WHERE role_id = 2")
+        total_candidates = cursor.fetchone()[0]
+
+        # Get recent applications for this user
+        recent_applications = []
+        if user["role_id"] == 2:  # Applicant
+            cursor.execute("""
+                SELECT a.id, jp.title, a.date_of_registration, s.name as status
+                FROM application a
+                JOIN job_posting jp ON a.job_posting_id = jp.id
+                JOIN status s ON a.status_id = s.id
+                WHERE a.person_id = ?
+                ORDER BY a.date_of_registration DESC
+                LIMIT 5
+            """, (user["person_id"],))
+            recent_applications = cursor.fetchall()
+
+        conn.close()
+
+        return templates.TemplateResponse("dashboard.html", {
+            "request": request,
+            "user": user,
+            "stats": {
+                "active_jobs": active_jobs,
+                "total_applications": total_applications,
+                "total_candidates": total_candidates
+            },
+            "recent_applications": recent_applications
+        })
+
+    except Exception as e:
+        logger.error("Dashboard error", error=str(e))
+        return templates.TemplateResponse("dashboard.html", {
+            "request": request,
+            "user": user,
+            "error": "Unable to load dashboard data"
+        })
+
+@app.get("/jobs", response_class=HTMLResponse)
+async def jobs_page(request: Request):
+    """Jobs listing page."""
+    user = get_current_user(request)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT jp.id, jp.title, jp.description, jp.location, jp.salary_min, jp.salary_max,
+                   jp.employment_type, jp.experience_level, jc.name as category
+            FROM job_posting jp
+            LEFT JOIN job_category jc ON jp.category_id = jc.id
+            WHERE jp.status = 'active'
+            ORDER BY jp.created_at DESC
+        """)
+
+        jobs = cursor.fetchall()
+        conn.close()
+
+        return templates.TemplateResponse("jobs.html", {
+            "request": request,
+            "user": user,
+            "jobs": jobs
+        })
+
+    except Exception as e:
+        logger.error("Jobs page error", error=str(e))
+        return templates.TemplateResponse("jobs.html", {
+            "request": request,
+            "user": user,
+            "error": "Unable to load jobs"
+        })
+
+@app.get("/logout")
+async def logout(request: Request):
+    """Logout user."""
+    request.session.clear()
+    return RedirectResponse(url="/", status_code=302)
 
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "edge-service", "timestamp": datetime.utcnow().isoformat()}
-
-@app.get("/debug/{path:path}")
-async def debug_path(path: str):
-    """Debug endpoint to test path handling."""
-    service_name = get_service_name_from_path(f"/{path}")
-    return {
-        "path": path,
-        "full_path": f"/{path}",
-        "service_name": service_name,
-        "service_routes": list(SERVICE_ROUTES.keys())
-    }
-
-# Static files and templates for web interface
-try:
-    app.mount("/static", StaticFiles(directory="edge_service/static"), name="static")
-    templates = Jinja2Templates(directory="edge_service/templates")
-
-    @app.get("/", response_class=HTMLResponse)
-    async def index(request: Request):
-        return templates.TemplateResponse("index.html", {"request": request})
-
-    @app.get("/application", response_class=HTMLResponse)
-    async def application_page(request: Request):
-        return templates.TemplateResponse("application.html", {"request": request})
-
-    @app.get("/application_list", response_class=HTMLResponse)
-    async def application_list_page(request: Request):
-        return templates.TemplateResponse("application_list.html", {"request": request})
-
-except Exception as e:
-    logger.warning("Web interface not available", error=str(e))
-
-    @app.get("/")
-    async def fallback_index():
-        return {"message": "Edge Service API Gateway", "status": "running"}
-
-@app.api_route("/registration/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def route_registration(
-    path: str,
-    request: Request,
-    token_data: Optional[Dict] = Depends(validate_token_dependency)
-):
-    """Route registration service requests."""
     try:
-        full_path = f"/registration/{path}"
-        logger.info(f"Registration request: {request.method} {full_path}")
+        # Test database connection
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1")
+        result = cursor.fetchone()
+        conn.close()
 
-        # Get request body
-        body = None
-        if request.method in ["POST", "PUT", "PATCH"]:
-            body = await request.body()
+        if result and result[0] == 1:
+            return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+        else:
+            return {"status": "unhealthy", "error": "Database check failed"}
 
-        # Route to registration service
-        response = await route_to_service(
-            service_name="registration-service",
-            path=full_path,
-            method=request.method,
-            headers=dict(request.headers),
-            body=body
-        )
-
-        return response
-
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error("Registration routing failed", path=path, error=str(e))
-        raise HTTPException(status_code=500, detail="Internal gateway error")
+        return {"status": "unhealthy", "error": str(e)}
 
-@app.api_route("/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def route_auth(
-    path: str,
-    request: Request,
-    token_data: Optional[Dict] = Depends(validate_token_dependency)
-):
-    """Route auth service requests."""
-    try:
-        full_path = f"/auth/{path}"
-        logger.info(f"Auth request: {request.method} {full_path}")
-
-        # Get request body
-        body = None
-        if request.method in ["POST", "PUT", "PATCH"]:
-            body = await request.body()
-
-        # Route to auth service
-        response = await route_to_service(
-            service_name="auth-service",
-            path=full_path,
-            method=request.method,
-            headers=dict(request.headers),
-            body=body
-        )
-
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Auth routing failed", path=path, error=str(e))
-        raise HTTPException(status_code=500, detail="Internal gateway error")
-
-@app.api_route("/jobapplications/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def route_job_applications(
-    path: str,
-    request: Request,
-    token_data: Optional[Dict] = Depends(validate_token_dependency)
-):
-    """Route job application service requests."""
-    try:
-        full_path = f"/jobapplications/{path}"
-        logger.info(f"Job application request: {request.method} {full_path}")
-
-        # Get request body
-        body = None
-        if request.method in ["POST", "PUT", "PATCH"]:
-            body = await request.body()
-
-        # Route to job application service
-        response = await route_to_service(
-            service_name="job-application-service",
-            path=full_path,
-            method=request.method,
-            headers=dict(request.headers),
-            body=body
-        )
-
-        return response
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Job application routing failed", path=path, error=str(e))
-        raise HTTPException(status_code=500, detail="Internal gateway error")
-
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException):
-    """Handle HTTP exceptions."""
-    logger.warning("HTTP exception",
-                  status_code=exc.status_code,
-                  detail=exc.detail,
-                  path=str(request.url))
-
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={"error": exc.detail, "status_code": exc.status_code}
-    )
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request: Request, exc: Exception):
-    """Handle general exceptions."""
-    logger.error("Unhandled exception",
-                error=str(exc),
-                path=str(request.url))
-
-    return JSONResponse(
-        status_code=500,
-        content={"error": "Internal server error", "status_code": 500}
-    )
+# Session middleware
+from starlette.middleware.sessions import SessionMiddleware
+app.add_middleware(SessionMiddleware, secret_key="your-secret-key-here")
 
 if __name__ == "__main__":
-    import uvicorn
+    logger.info("Starting Edge Service")
     uvicorn.run(
-        app, 
-        host="0.0.0.0", 
+        app,
+        host="0.0.0.0",
         port=8080,
-        log_level="info",
-        access_log=True
+        reload=False
     )

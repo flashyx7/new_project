@@ -1,21 +1,22 @@
+"""
+Security utilities for authentication and authorization.
+"""
 import os
-import jwt
-from jose import jwt as jose_jwt
-import structlog
 from datetime import datetime, timedelta
+from typing import Union, Any
+import jwt
 from passlib.context import CryptContext
-from typing import Optional, Dict, Any
+import structlog
 
-# Configure logging
 logger = structlog.get_logger()
 
-# Use pbkdf2_sha256 for password hashing (pure Python, cross-platform)
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+# Configuration
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here-change-in-production")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# JWT settings
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-production")
-JWT_ALGORITHM = "HS256"
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its hash."""
@@ -26,61 +27,37 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 def get_password_hash(password: str) -> str:
-    """Generate password hash."""
+    """Hash a password."""
     try:
         return pwd_context.hash(password)
     except Exception as e:
         logger.error("Password hashing failed", error=str(e))
-        raise ValueError("Failed to hash password")
+        raise
 
-def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
-    """Create a JWT access token."""
+def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None):
+    """Create JWT access token."""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+
+    to_encode.update({"exp": expire})
     try:
-        to_encode = data.copy()
-        if expires_delta:
-            expire = datetime.utcnow() + expires_delta
-        else:
-            expire = datetime.utcnow() + timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-        
-        to_encode.update({"exp": expire, "iat": datetime.utcnow()})
-        encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-        logger.info("JWT token created successfully", username=data.get("username"))
+        encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
         return encoded_jwt
     except Exception as e:
-        logger.error("Failed to create JWT token", error=str(e))
-        raise ValueError("Failed to create access token")
+        logger.error("Token creation failed", error=str(e))
+        raise
 
-def verify_token(token: str) -> Optional[Dict[str, Any]]:
-    """Verify and decode a JWT token."""
+def verify_token(token: str) -> Union[dict, None]:
+    """Verify and decode JWT token."""
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-        
-        # Check if token is expired
-        exp = payload.get("exp")
-        if exp and datetime.utcnow() > datetime.fromtimestamp(exp):
-            logger.warning("JWT token expired", username=payload.get("username"))
-            return None
-            
-        logger.debug("JWT token verified successfully", username=payload.get("username"))
-        return payload
-    except jwt.ExpiredSignatureError:
-        logger.warning("JWT token expired")
-        return None
-    except jwt.InvalidTokenError as e:
-        logger.warning("Invalid JWT token", error=str(e))
-        return None
-    except Exception as e:
-        logger.error("JWT token verification failed", error=str(e))
-        return None
-
-def decode_token(token: str) -> Optional[Dict[str, Any]]:
-    """Decode a JWT token without verification (for testing)."""
-    try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except jwt.PyJWTError as e:
-        logger.warning("JWT token decode failed", error=str(e))
+        logger.error("Token verification failed", error=str(e))
         return None
     except Exception as e:
-        logger.error("JWT token decode failed", error=str(e))
-        return None 
+        logger.error("Token verification error", error=str(e))
+        return None
