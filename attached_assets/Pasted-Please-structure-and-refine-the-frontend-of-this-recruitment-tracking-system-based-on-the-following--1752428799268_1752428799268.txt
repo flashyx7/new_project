@@ -1,0 +1,100 @@
+Please structure and refine the frontend of this recruitment tracking system based on the following UI flow, but only include the features that are already implemented in the current backend/codebase. Do not add any new functionality unless it already exists.
+
+🏠 Home Page (Enhanced & Realistic)
+Create a professional and clean landing page that includes:
+
+Logo and navigation bar
+
+Headline like: "Smart Recruitment. Simplified."
+
+Brief introduction (1-2 lines) about what the system does (e.g., AI-based candidate matching, streamlined hiring workflow)
+
+Feature highlights section (icons + short descriptions) such as:
+
+Post jobs and track applications
+
+Schedule interviews
+
+Generate offer letters
+
+AI-powered resume matching (if implemented)
+
+Call to Action Buttons:
+
+Login
+
+Register
+
+Testimonials or trusted companies section (mock/fake content is fine here)
+
+Footer with About, Contact, and Help links
+
+🔐 Login Page
+Email and password fields
+
+Redirect to appropriate dashboard based on role
+
+“Forgot Password” (only if backend supports it)
+
+Submit button
+
+Include Dark Mode toggle
+
+📝 Registration Page
+Fields: Full name, email, password, confirm password
+
+Resume upload field (if implemented)
+
+Submit button
+
+📊 Dashboard (Role-Based)
+Applicant Dashboard (only if implemented):
+Tabs/sections:
+
+Profile
+
+Job Listings
+
+My Applications
+
+Interview Schedule
+
+Offers
+
+Notifications
+
+Admin Dashboard (only if implemented):
+Tabs/sections:
+
+Dashboard Overview
+
+Job Management
+
+Applicant Management
+
+Interview Scheduling
+
+Offer Management
+
+Resume Parser
+
+Settings
+
+Notifications
+
+🌙 Dark Mode
+Add a global toggle (navbar or footer) to switch between light and dark mode.
+
+Ensure the style updates are consistent across all pages and stored per user (if supported).
+
+✅ Important Guidelines:
+
+Only implement what is already built or partially implemented in the backend or microservices.
+
+All UI components (e.g., login forms, dashboard tabs, buttons) must be functional and connected.
+
+Do not include broken components, fake features, or placeholders.
+
+Ensure UI is consistent, responsive, and error-free.
+
+🎯 Goal: A realistic, professional, and fully working frontend tailored to the functionality currently available in the system
