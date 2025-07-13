@@ -1,5 +1,6 @@
 import os
 import jwt
+from jose import jwt as jose_jwt
 import structlog
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
