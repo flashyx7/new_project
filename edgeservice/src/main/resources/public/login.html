@@ -1,0 +1,69 @@
+<section ng-controller="login" class="container">
+    <h3 translate>login.page.title</h3>
+
+    <!--Alert messages-->
+    <div class="alert alert-success" ng-show="registration_success_alert" translate>
+        registration.alert.registrationSuccessAlert
+    </div>
+
+    <div class="alert alert-danger" ng-show="login_user_not_exists_error" translate>
+        login.alert.user_not_exists
+    </div>
+
+    <div class="alert alert-danger" ng-show="login_user_cred_input_error" translate>
+        login.alert.user_cred_input_error
+    </div>
+
+    <div class="alert alert-warning" ng-show="login_service_error" translate>
+        login.alert.service_error
+    </div>
+
+    <div class="alert alert-warning" ng-show="login_service_gone" translate>
+        login.alert.service_gone
+    </div>
+
+    <div class="alert alert-success" ng-show="logout_success" translate>
+        logout.alert.success
+    </div>
+
+    <!--Login form-->
+    <form name = "loginForm" role="form" ng-submit="login.submitLoginForm(loginForm)">
+        <!--Username and error messages-->
+        <div class="form-group">
+            <label for="username" translate>login.form.username</label>
+            <input type="text"
+                   class="form-control"
+                   id="username"
+                   name="username"
+                   ng-model="login.username"
+                   minlength="2"
+                   required/>
+        </div>
+
+        <div ng-messages="loginForm.username.$error" role="alert" ng-show="loginForm.username.$dirty">
+            <div ng-message="required" translate>forms.fields.errorMsg.required</div>
+            <div ng-message="minlength" translate>forms.username.errorMsg.minlength</div>
+        </div>
+
+        <!--Password and error messages-->
+        <div class="form-group">
+            <label for="password" translate>login.form.password</label>
+            <input type="password"
+                   class="form-control"
+                   id="password"
+                   name="password"
+                   ng-model="login.password"
+                   minlength="8"
+                   required/>
+        </div>
+
+        <div ng-messages="loginForm.password.$error" role="alert" ng-show="loginForm.password.$dirty">
+            <div ng-message="required" translate>forms.fields.errorMsg.required</div>
+            <div ng-message="minlength" translate>forms.password.errorMsg.minlength</div>
+        </div>
+
+        <!--Login Bttn-->
+        <button type="submit" ng-disabled = "loginForm.$invalid" class="btn btn-primary" translate>login.form.submitBttn</button>
+        <span ng-show="loginForm_pending_request" translate>login.form.pending</span>
+    </form>
+</section>

@@ -1,0 +1,327 @@
+{% extends "base.html" %}
+{% block title %}Applications List - Recruitment System{% endblock %}
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-lg">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0"><i class="fas fa-list me-2"></i>Applications List</h3>
+                    <button class="btn btn-light" onclick="location.href='/application'">
+                        <i class="fas fa-plus me-2"></i>New Application
+                    </button>
+                </div>
+                <div class="card-body">
+                    <!-- Filter and Search -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-search"></i></span>
+                                <input type="text" class="form-control" id="searchInput" placeholder="Search applications...">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select" id="statusFilter">
+                                <option value="">All Statuses</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-outline-secondary w-100" onclick="refreshApplications()">
+                                <i class="fas fa-sync-alt me-2"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Applications Table -->
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Applicant</th>
+                                    <th>Email</th>
+                                    <th>Status</th>
+                                    <th>Submitted</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="applicationsTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <p class="mt-2">Loading applications...</p>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <nav aria-label="Applications pagination">
+                        <ul class="pagination justify-content-center" id="pagination">
+                            <!-- Pagination will be populated by JavaScript -->
+                        </ul>
+                    </nav>
+
+                    <!-- Message Container -->
+                    <div id="applicationsMessage" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Application Details Modal -->
+<div class="modal fade" id="applicationModal" tabindex="-1" aria-labelledby="applicationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="applicationModalLabel">Application Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="applicationModalBody">
+                <!-- Application details will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="approveBtn" style="display: none;">Approve</button>
+                <button type="button" class="btn btn-danger" id="rejectBtn" style="display: none;">Reject</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Global variables for pagination
+let currentPage = 1;
+let totalPages = 1;
+let applications = [];
+
+// Load applications on page load
+document.addEventListener('DOMContentLoaded', function() {
+    loadApplications();
+    
+    // Add event listeners for search and filter
+    document.getElementById('searchInput').addEventListener('input', debounce(filterApplications, 300));
+    document.getElementById('statusFilter').addEventListener('change', filterApplications);
+});
+
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+async function loadApplications() {
+    try {
+        const response = await fetch('/jobapplications/applications');
+        if (response.ok) {
+            applications = await response.json();
+            displayApplications(applications);
+        } else {
+            showMessage('applicationsMessage', 'Failed to load applications', 'error');
+        }
+    } catch (error) {
+        showMessage('applicationsMessage', `Error: ${error.message}`, 'error');
+    }
+}
+
+function displayApplications(apps) {
+    const tbody = document.getElementById('applicationsTableBody');
+    
+    if (apps.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center text-muted">
+                    <i class="fas fa-inbox fa-3x mb-3"></i>
+                    <p>No applications found</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = apps.map(app => `
+        <tr>
+            <td>${app.id}</td>
+            <td>${app.firstname} ${app.lastname}</td>
+            <td>${app.email}</td>
+            <td>
+                <span class="badge ${getStatusBadgeClass(app.status)}">${app.status}</span>
+            </td>
+            <td>${new Date(app.created_at).toLocaleDateString()}</td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary" onclick="viewApplication(${app.id})">
+                    <i class="fas fa-eye"></i> View
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+function getStatusBadgeClass(status) {
+    switch (status.toLowerCase()) {
+        case 'approved': return 'bg-success';
+        case 'rejected': return 'bg-danger';
+        case 'pending': return 'bg-warning';
+        default: return 'bg-secondary';
+    }
+}
+
+function filterApplications() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    
+    const filtered = applications.filter(app => {
+        const matchesSearch = app.firstname.toLowerCase().includes(searchTerm) ||
+                            app.lastname.toLowerCase().includes(searchTerm) ||
+                            app.email.toLowerCase().includes(searchTerm);
+        const matchesStatus = !statusFilter || app.status.toLowerCase() === statusFilter.toLowerCase();
+        
+        return matchesSearch && matchesStatus;
+    });
+    
+    displayApplications(filtered);
+}
+
+function refreshApplications() {
+    loadApplications();
+}
+
+async function viewApplication(applicationId) {
+    try {
+        const response = await fetch(`/jobapplications/applications/${applicationId}`);
+        if (response.ok) {
+            const application = await response.json();
+            showApplicationModal(application);
+        } else {
+            showMessage('applicationsMessage', 'Failed to load application details', 'error');
+        }
+    } catch (error) {
+        showMessage('applicationsMessage', `Error: ${error.message}`, 'error');
+    }
+}
+
+function showApplicationModal(application) {
+    const modalBody = document.getElementById('applicationModalBody');
+    const approveBtn = document.getElementById('approveBtn');
+    const rejectBtn = document.getElementById('rejectBtn');
+    
+    modalBody.innerHTML = `
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Personal Information</h6>
+                <p><strong>Name:</strong> ${application.firstname} ${application.lastname}</p>
+                <p><strong>Email:</strong> ${application.email}</p>
+                <p><strong>Date of Birth:</strong> ${application.date_of_birth}</p>
+            </div>
+            <div class="col-md-6">
+                <h6>Application Details</h6>
+                <p><strong>Status:</strong> <span class="badge ${getStatusBadgeClass(application.status)}">${application.status}</span></p>
+                <p><strong>Submitted:</strong> ${new Date(application.created_at).toLocaleString()}</p>
+            </div>
+        </div>
+        <hr>
+        <div class="row">
+            <div class="col-12">
+                <h6>Competences</h6>
+                <div id="competencesList">
+                    <!-- Competences will be loaded here -->
+                </div>
+            </div>
+        </div>
+        <hr>
+        <div class="row">
+            <div class="col-12">
+                <h6>Availability</h6>
+                <div id="availabilityList">
+                    <!-- Availability will be loaded here -->
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Show/hide action buttons based on status
+    if (application.status.toLowerCase() === 'pending') {
+        approveBtn.style.display = 'inline-block';
+        rejectBtn.style.display = 'inline-block';
+        approveBtn.onclick = () => updateApplicationStatus(application.id, 'approved');
+        rejectBtn.onclick = () => updateApplicationStatus(application.id, 'rejected');
+    } else {
+        approveBtn.style.display = 'none';
+        rejectBtn.style.display = 'none';
+    }
+    
+    // Load competences and availability
+    loadApplicationCompetences(application.id);
+    loadApplicationAvailability(application.id);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('applicationModal'));
+    modal.show();
+}
+
+async function loadApplicationCompetences(applicationId) {
+    try {
+        const response = await fetch(`/jobapplications/applications/${applicationId}/competences`);
+        if (response.ok) {
+            const competences = await response.json();
+            const container = document.getElementById('competencesList');
+            container.innerHTML = competences.map(comp => 
+                `<span class="badge bg-info me-2 mb-2">${comp.name} (${comp.years_of_experience} years)</span>`
+            ).join('');
+        }
+    } catch (error) {
+        console.error('Failed to load competences:', error);
+    }
+}
+
+async function loadApplicationAvailability(applicationId) {
+    try {
+        const response = await fetch(`/jobapplications/applications/${applicationId}/availability`);
+        if (response.ok) {
+            const availability = await response.json();
+            const container = document.getElementById('availabilityList');
+            container.innerHTML = availability.map(avail => 
+                `<span class="badge bg-success me-2 mb-2">${avail.from_date} to ${avail.to_date}</span>`
+            ).join('');
+        }
+    } catch (error) {
+        console.error('Failed to load availability:', error);
+    }
+}
+
+async function updateApplicationStatus(applicationId, status) {
+    try {
+        const response = await fetch(`/jobapplications/applications/${applicationId}/status`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ status: status })
+        });
+        
+        if (response.ok) {
+            showMessage('applicationsMessage', `Application ${status} successfully`, 'success');
+            loadApplications(); // Refresh the list
+            bootstrap.Modal.getInstance(document.getElementById('applicationModal')).hide();
+        } else {
+            showMessage('applicationsMessage', 'Failed to update application status', 'error');
+        }
+    } catch (error) {
+        showMessage('applicationsMessage', `Error: ${error.message}`, 'error');
+    }
+}
+</script>
+{% endblock %} 

@@ -1,0 +1,1 @@
+# Shared package for recruitment system microservices 
