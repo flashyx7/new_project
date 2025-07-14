@@ -898,6 +898,14 @@ async def profile_page(request: Request):
             "profile": profile
         })
 
+    except Exception as e:
+        logger.error("Profile page failed", error=str(e))
+        return templates.TemplateResponse("profile.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load profile. Please try again."
+        })
+
 @app.post("/applicant/profile")
 async def update_profile(
     request: Request,
@@ -939,7 +947,7 @@ async def update_profile(
 @app.get("/applicant/job-matches", response_class=HTMLResponse)
 async def job_matches(request: Request):
     """Job matches page for applicants."""
-    user = get_current_user(request)
+    user = get_current_user(request):
     if not user or user["role_id"] != 2:
         return RedirectResponse(url="/login", status_code=302)
 
