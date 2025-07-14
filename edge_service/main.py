@@ -21,13 +21,19 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
 try:
-    from shared.security import verify_password, create_access_token, verify_token
+    from shared.security import verify_password, create_access_token, verify_token, get_password_hash
+    print("✓ Successfully imported security module")
 except ImportError as e:
     print(f"Warning: Could not import security module: {e}")
+    print("Using fallback security functions...")
     # Fallback security functions
     import bcrypt
     import jwt
     from datetime import datetime, timedelta
+    
+    def get_password_hash(password: str) -> str:
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
     
     def verify_password(plain_password: str, hashed_password: str) -> bool:
         try:
@@ -239,7 +245,6 @@ async def register(
         person_id = cursor.lastrowid
 
         # Create credential
-        from shared.security import get_password_hash
         hashed_password = get_password_hash(password)
         cursor.execute("""
             INSERT INTO credential (person_id, username, password)

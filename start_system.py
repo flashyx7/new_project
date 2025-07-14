@@ -10,13 +10,37 @@ import sys
 import time
 import os
 
+def check_dependencies():
+    """Check and install dependencies."""
+    print("🔍 Checking dependencies...")
+    try:
+        result = subprocess.run([sys.executable, "check_dependencies.py"], 
+                              capture_output=True, text=True, timeout=60)
+        print(result.stdout)
+        if result.stderr:
+            print("Warnings:", result.stderr)
+        return result.returncode == 0
+    except Exception as e:
+        print(f"⚠ Dependency check failed: {e}")
+        return False
+
 def main():
     """Start the recruitment system."""
     print("🚀 Starting Recruitment System...")
     print("=" * 50)
     
+    # Check dependencies first
+    if not check_dependencies():
+        print("⚠️  Installing missing dependencies...")
+        try:
+            subprocess.run([sys.executable, "-m", "pip", "install", "itsdangerous==2.1.2"], 
+                         check=True, timeout=30)
+            print("✅ Dependencies installed")
+        except Exception as e:
+            print(f"❌ Failed to install dependencies: {e}")
+    
     # Initialize database first
-    print("1. Initializing database...")
+    print("\n1. Initializing database...")
     try:
         result = subprocess.run([sys.executable, "scripts/init_database.py"], 
                               capture_output=True, text=True, timeout=30)
@@ -43,6 +67,7 @@ def main():
         print("   Username: jcandidate, Password: candidate123 (Applicant)")
         print("   Username: jrecruiter, Password: recruiter123 (Recruiter)")
         print("\n" + "=" * 50)
+        print("🚀 Starting server...")
         
         # Start the edge service
         subprocess.run([sys.executable, "edge_service/main.py"])
@@ -51,6 +76,9 @@ def main():
         print("\n\nShutting down...")
     except Exception as e:
         print(f"Error starting edge service: {e}")
+        print("Traceback:")
+        import traceback
+        traceback.print_exc()
         return 1
     
     return 0

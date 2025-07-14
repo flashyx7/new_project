@@ -1,64 +1,80 @@
 
 #!/usr/bin/env python3
 """
-Dependency checker for the Recruitment System.
-Verifies all required packages are installed.
+Check all dependencies for the Recruitment System.
 """
 
 import sys
 import importlib
+import subprocess
 
 REQUIRED_PACKAGES = [
     'fastapi',
     'uvicorn',
-    'pydantic',
-    'sqlalchemy',
-    'pymysql',
-    'cryptography',
-    'jose',
-    'passlib',
-    'httpx',
-    'consul',
-    'structlog',
-    'pytest',
-    'dotenv',
     'jinja2',
+    'python_multipart',
+    'starlette',
     'aiofiles',
-    'dateutil',
-    'orjson',
+    'structlog',
+    'bcrypt',
+    'passlib',
+    'itsdangerous',
+    'sqlalchemy',
+    'PyJWT',
+    'httpx',
+    'requests',
+    'pytest',
+    'python_dotenv',
+    'python_dateutil',
     'email_validator',
-    'healthcheck',
-    'slowapi',
-    'prometheus_client',
-    'sentry_sdk',
-    'requests'
+    'python_jose'
 ]
 
-def check_dependencies():
-    """Check if all required dependencies are installed."""
+def check_package(package_name):
+    """Check if a package is available."""
+    try:
+        importlib.import_module(package_name)
+        print(f"✅ {package_name}")
+        return True
+    except ImportError:
+        print(f"❌ {package_name} - MISSING")
+        return False
+
+def install_missing_packages():
+    """Install missing packages."""
     missing = []
-    installed = []
-    
     for package in REQUIRED_PACKAGES:
-        try:
-            importlib.import_module(package)
-            installed.append(package)
-            print(f"✅ {package}")
-        except ImportError:
+        if not check_package(package):
             missing.append(package)
-            print(f"❌ {package}")
-    
-    print(f"\nSummary:")
-    print(f"✅ Installed: {len(installed)}")
-    print(f"❌ Missing: {len(missing)}")
     
     if missing:
-        print(f"\nMissing packages: {', '.join(missing)}")
-        return False
+        print(f"\nInstalling {len(missing)} missing packages...")
+        for package in missing:
+            try:
+                subprocess.run([sys.executable, "-m", "pip", "install", package], 
+                             check=True, capture_output=True)
+                print(f"✅ Installed {package}")
+            except subprocess.CalledProcessError as e:
+                print(f"❌ Failed to install {package}: {e}")
+
+def main():
+    """Main function."""
+    print("🔍 Checking dependencies...")
+    print("=" * 50)
+    
+    all_good = True
+    for package in REQUIRED_PACKAGES:
+        if not check_package(package):
+            all_good = False
+    
+    if not all_good:
+        print("\n⚠️  Some packages are missing. Installing...")
+        install_missing_packages()
     else:
-        print("\n🎉 All dependencies are installed!")
-        return True
+        print("\n✅ All required packages are available")
+    
+    return all_good
 
 if __name__ == "__main__":
-    if not check_dependencies():
-        sys.exit(1)
+    success = main()
+    sys.exit(0 if success else 1)
