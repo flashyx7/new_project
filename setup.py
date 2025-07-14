@@ -22,6 +22,27 @@ def run_command(command, description):
             return False
     except Exception as e:
         print(f"❌ {description} failed: {str(e)}")
+        returimport subprocess
+import sys
+import os
+
+def run_command(command, description):
+    """Run a command and return success status."""
+    print(f"\n🔄 {description}...")
+    try:
+        result = subprocess.run(command.split(), capture_output=True, text=True, timeout=60)
+        if result.returncode == 0:
+            print(f"✅ {description} completed successfully")
+            if result.stdout:
+                print(result.stdout)
+            return True
+        else:
+            print(f"❌ {description} failed")
+            if result.stderr:
+                print(f"Error: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"❌ {description} failed with exception: {e}")
         return False
 
 def main():
@@ -55,4 +76,5 @@ def main():
     print("\nFor testing, run: python scripts/test_system.py")
 
 if __name__ == "__main__":
+    main()__main__":
     main()

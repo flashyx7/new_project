@@ -72,7 +72,7 @@ def main():
         # Start the edge service
         result = subprocess.run([sys.executable, "edge_service/main.py"], 
                                capture_output=False, text=True)
-        
+
         if result.returncode != 0:
             print(f"❌ Edge service failed with return code: {result.returncode}")
             return 1

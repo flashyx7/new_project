@@ -5,6 +5,8 @@ Simple test to debug edge service path handling.
 
 import requests
 
+import requests
+
 def test_edge_paths():
     """Test different paths on the edge service."""
     print("Testing edge service path handling...")

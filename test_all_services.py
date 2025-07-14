@@ -45,7 +45,7 @@ def test_edge_service_functionality():
         else:
             print(f"⚠ Jobs API failed: {response.status_code}")
     except Exception as e:
-        print(f"❌ Jobs API failed: {e}")
+        print(f"❌ Jobs API failed: {e}")obs API failed: {e}")
 
 def main():
     """Main test function."""
