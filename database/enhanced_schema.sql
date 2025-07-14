@@ -1,4 +1,3 @@
-
 -- Enhanced Recruitment System Database Schema for SQLite
 
 -- Enable foreign key constraints

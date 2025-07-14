@@ -43,24 +43,3 @@ healthcheck==1.3.3
 
 # Additional dependencies for microservices
 python-jose[cryptography]==3.3.0
-bcrypt==4.0.1
-aiofiles
-bcrypt
-email-validator
-fastapi
-httpx
-jinja2
-passlib[bcrypt]
-pydantic
-PyJWT
-pymysql
-pytest
-pytest-asyncio
-python-dateutil
-python-dotenv
-python-jose[cryptography]
-python-multipart
-requests
-sqlalchemy
-structlog
-uvicorn[standard]

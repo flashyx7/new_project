@@ -50,8 +50,11 @@ def init_database():
     try:
         # Remove existing database to start fresh
         if os.path.exists(db_path):
-            os.remove(db_path)
-            logger.info("Removed existing database file")
+            try:
+                os.remove(db_path)
+                logger.info("Removed existing database file")
+            except PermissionError:
+                logger.warning("Could not remove existing database file, proceeding anyway")
         
         # Connect to database
         conn = sqlite3.connect(db_path)

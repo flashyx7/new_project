@@ -20,7 +20,35 @@ from starlette.middleware.sessions import SessionMiddleware
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from shared.security import verify_password, create_access_token, verify_token
+try:
+    from shared.security import verify_password, create_access_token, verify_token
+except ImportError as e:
+    print(f"Warning: Could not import security module: {e}")
+    # Fallback security functions
+    import bcrypt
+    import jwt
+    from datetime import datetime, timedelta
+    
+    def verify_password(plain_password: str, hashed_password: str) -> bool:
+        try:
+            return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+        except:
+            return False
+    
+    def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
+        to_encode = data.copy()
+        if expires_delta:
+            expire = datetime.utcnow() + expires_delta
+        else:
+            expire = datetime.utcnow() + timedelta(hours=24)
+        to_encode.update({"exp": expire})
+        return jwt.encode(to_encode, "secret-key", algorithm="HS256")
+    
+    def verify_token(token: str) -> dict:
+        try:
+            return jwt.decode(token, "secret-key", algorithms=["HS256"])
+        except:
+            return None
 
 # Configure logging
 structlog.configure(

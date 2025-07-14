@@ -17,11 +17,7 @@ mode = "sequential"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python scripts/init_database.py"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "python edge_service/main.py"
+args = "python start_system.py"
 
 [[workflows.workflow]]
 name = "Initialize Database Only"
