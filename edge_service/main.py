@@ -288,12 +288,12 @@ async def dashboard(request: Request):
         recent_applications = []
         if user["role_id"] == 2:  # Applicant
             cursor.execute("""
-                SELECT a.id, jp.title, a.date_of_registration, s.name as status
+                SELECT a.id, jp.title, a.applied_date, s.name as status
                 FROM application a
                 JOIN job_posting jp ON a.job_posting_id = jp.id
-                JOIN status s ON a.status_id = s.id
+                JOIN application_status s ON a.status_id = s.id
                 WHERE a.person_id = ?
-                ORDER BY a.date_of_registration DESC
+                ORDER BY a.applied_date DESC
                 LIMIT 5
             """, (user["person_id"],))
             recent_applications = cursor.fetchall()

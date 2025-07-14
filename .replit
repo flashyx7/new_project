@@ -3,12 +3,13 @@ run = "uvicorn undefined:app --host 0.0.0.0 --port 3000"
 
 [nix]
 channel = "stable-24_05"
+packages = ["libxcrypt"]
 
 [deployment]
 run = ["sh", "-c", "uvicorn undefined:app --host 0.0.0.0 --port 3000"]
 
 [workflows]
-runButton = "Start Recruitment System"
+runButton = "Reinitialize and Start System"
 
 [[workflows.workflow]]
 name = "Start Recruitment System"
@@ -58,6 +59,23 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "python start_all_microservices.py"
+
+[[workflows.workflow]]
+name = "Reinitialize and Start System"
+author = 45002581
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "rm -f recruitment_system.db"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python scripts/init_database.py"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python edge_service/main.py"
 
 [[ports]]
 localPort = 8080

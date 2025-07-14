@@ -67,13 +67,6 @@ def init_database():
             with open(schema_path, 'r') as f:
                 schema_sql = f.read()
 
-            # Create tables with column names matching the code expectations
-            schema_sql = schema_sql.replace("role_id INTEGER PRIMARY KEY AUTOINCREMENT", "id INTEGER PRIMARY KEY AUTOINCREMENT")
-            schema_sql = schema_sql.replace("person_id INTEGER PRIMARY KEY AUTOINCREMENT", "id INTEGER PRIMARY KEY AUTOINCREMENT")
-            schema_sql = schema_sql.replace("credential_id INTEGER PRIMARY KEY AUTOINCREMENT", "id INTEGER PRIMARY KEY AUTOINCREMENT")
-            schema_sql = schema_sql.replace("FOREIGN KEY (role_id) REFERENCES role(role_id)", "FOREIGN KEY (role_id) REFERENCES role(id)")
-            schema_sql = schema_sql.replace("FOREIGN KEY (person_id) REFERENCES person(person_id)", "FOREIGN KEY (person_id) REFERENCES person(id)")
-
             # Execute the entire schema at once for SQLite
             cursor.executescript(schema_sql)
             logger.info("Schema executed successfully")

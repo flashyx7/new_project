@@ -21,7 +21,7 @@ DROP TABLE IF EXISTS role;
 
 -- Create roles table
 CREATE TABLE role (
-    role_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(50) NOT NULL UNIQUE,
     description TEXT,
     permissions TEXT, -- JSON string of permissions
@@ -30,7 +30,7 @@ CREATE TABLE role (
 );
 
 -- Insert default roles
-INSERT INTO role (role_id, name, description, permissions) VALUES
+INSERT INTO role (id, name, description, permissions) VALUES
 (1, 'recruiter', 'Recruiter role with job posting and application management permissions', '["create_job", "view_applications", "update_application_status", "view_candidates"]'),
 (2, 'applicant', 'Job applicant role with application submission permissions', '["apply_job", "view_own_applications", "update_profile"]'),
 (3, 'admin', 'Administrator role with full system access', '["*"]'),
@@ -38,7 +38,7 @@ INSERT INTO role (role_id, name, description, permissions) VALUES
 
 -- Create competence table
 CREATE TABLE competence (
-    competence_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(100) NOT NULL,
     description TEXT,
     category VARCHAR(50),
@@ -46,7 +46,7 @@ CREATE TABLE competence (
 );
 
 -- Insert sample competencies
-INSERT INTO competence (competence_id, name, description, category) VALUES
+INSERT INTO competence (id, name, description, category) VALUES
 (1, 'Python', 'Python programming language', 'Programming'),
 (2, 'JavaScript', 'JavaScript programming language', 'Programming'),
 (3, 'React', 'React.js frontend framework', 'Frontend'),
@@ -57,7 +57,7 @@ INSERT INTO competence (competence_id, name, description, category) VALUES
 
 -- Create person table
 CREATE TABLE person (
-    person_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     firstname VARCHAR(100) NOT NULL,
     lastname VARCHAR(100) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
@@ -72,12 +72,12 @@ CREATE TABLE person (
     resume_url VARCHAR(500),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (role_id) REFERENCES role(role_id)
+    FOREIGN KEY (role_id) REFERENCES role(id)
 );
 
 -- Create credential table
 CREATE TABLE credential (
-    credential_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id INTEGER NOT NULL,
     username VARCHAR(100) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
@@ -88,12 +88,12 @@ CREATE TABLE credential (
     verification_token VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (person_id) REFERENCES person(person_id) ON DELETE CASCADE
+    FOREIGN KEY (person_id) REFERENCES person(id) ON DELETE CASCADE
 );
 
 -- Create application status table
 CREATE TABLE application_status (
-    status_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(50) NOT NULL UNIQUE,
     description TEXT,
     order_sequence INTEGER,
@@ -102,7 +102,7 @@ CREATE TABLE application_status (
 );
 
 -- Insert application statuses
-INSERT INTO application_status (status_id, name, description, order_sequence, is_final) VALUES
+INSERT INTO application_status (id, name, description, order_sequence, is_final) VALUES
 (1, 'submitted', 'Application has been submitted', 1, FALSE),
 (2, 'under_review', 'Application is being reviewed by HR', 2, FALSE),
 (3, 'interview_scheduled', 'Interview has been scheduled', 3, FALSE),
@@ -113,12 +113,12 @@ INSERT INTO application_status (status_id, name, description, order_sequence, is
 
 -- Create job category table
 CREATE TABLE job_category (
-    category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
     parent_category_id INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (parent_category_id) REFERENCES job_category(category_id)
+    FOREIGN KEY (parent_category_id) REFERENCES job_category(id)
 );
 
 -- Insert job categories
@@ -131,7 +131,7 @@ INSERT INTO job_category (category_id, name, description) VALUES
 
 -- Job postings table
 CREATE TABLE job_posting (
-    job_posting_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     title VARCHAR(200) NOT NULL,
     description TEXT NOT NULL,
     requirements TEXT,
@@ -152,8 +152,8 @@ CREATE TABLE job_posting (
     company_description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (category_id) REFERENCES job_category(category_id),
-    FOREIGN KEY (posted_by) REFERENCES person(person_id)
+    FOREIGN KEY (category_id) REFERENCES job_category(id),
+    FOREIGN KEY (posted_by) REFERENCES person(id)
 );
 
 -- Insert some sample job categories
@@ -205,7 +205,7 @@ CREATE TABLE availability (
 
 -- Create application table
 CREATE TABLE application (
-    application_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id INTEGER NOT NULL,
     job_posting_id INTEGER NOT NULL,
     cover_letter TEXT,
@@ -221,10 +221,10 @@ CREATE TABLE application (
     additional_documents TEXT, -- JSON array of document URLs
     recruiter_notes TEXT,
     rejection_reason TEXT,
-    FOREIGN KEY (person_id) REFERENCES person(person_id),
-    FOREIGN KEY (job_posting_id) REFERENCES job_posting(job_posting_id),
-    FOREIGN KEY (status_id) REFERENCES application_status(status_id),
-    FOREIGN KEY (updated_by) REFERENCES person(person_id),
+    FOREIGN KEY (person_id) REFERENCES person(id),
+    FOREIGN KEY (job_posting_id) REFERENCES job_posting(id),
+    FOREIGN KEY (status_id) REFERENCES application_status(id),
+    FOREIGN KEY (updated_by) REFERENCES person(id),
     UNIQUE(person_id, job_posting_id)
 );
 
