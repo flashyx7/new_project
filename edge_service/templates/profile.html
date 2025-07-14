@@ -1,0 +1,94 @@
+
+{% extends "base.html" %}
+
+{% block title %}My Profile - Recruitment System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>My Profile</h2>
+        <p class="lead">Manage your profile information</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" action="/applicant/profile">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="firstname" class="form-label">First Name</label>
+                                <input type="text" class="form-control" id="firstname" name="firstname" 
+                                       value="{{ profile[0] if profile else '' }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="lastname" class="form-label">Last Name</label>
+                                <input type="text" class="form-control" id="lastname" name="lastname" 
+                                       value="{{ profile[1] if profile else '' }}">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" 
+                               value="{{ profile[2] if profile else '' }}">
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="date_of_birth" class="form-label">Date of Birth</label>
+                                <input type="date" class="form-control" id="date_of_birth" name="date_of_birth" 
+                                       value="{{ profile[3] if profile else '' }}">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="phone" class="form-label">Phone</label>
+                                <input type="tel" class="form-control" id="phone" name="phone" 
+                                       value="{{ profile[4] if profile else '' }}">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="address" class="form-label">Address</label>
+                        <textarea class="form-control" id="address" name="address" rows="3">{{ profile[5] if profile else '' }}</textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">Update Profile</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Profile Completion</h5>
+            </div>
+            <div class="card-body">
+                <div class="progress mb-3">
+                    <div class="progress-bar" role="progressbar" style="width: 85%"></div>
+                </div>
+                <p class="small">85% Complete</p>
+                <ul class="list-unstyled small">
+                    <li class="text-success">✓ Basic Information</li>
+                    <li class="text-success">✓ Contact Details</li>
+                    <li class="text-warning">○ Skills & Experience</li>
+                    <li class="text-warning">○ Resume Upload</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

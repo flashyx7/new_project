@@ -1,0 +1,62 @@
+
+{% extends "base.html" %}
+
+{% block title %}My Applications - Recruitment System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>My Applications</h2>
+        <p class="lead">Track your job applications</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-body">
+                {% if applications %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Job Title</th>
+                                    <th>Location</th>
+                                    <th>Type</th>
+                                    <th>Applied Date</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for app in applications %}
+                                <tr>
+                                    <td>{{ app[1] }}</td>
+                                    <td>{{ app[2] }}</td>
+                                    <td>{{ app[3] }}</td>
+                                    <td>{{ app[4] }}</td>
+                                    <td>
+                                        <span class="badge {% if app[5] == 'submitted' %}bg-primary{% elif app[5] == 'reviewed' %}bg-warning{% elif app[5] == 'interviewed' %}bg-info{% elif app[5] == 'hired' %}bg-success{% else %}bg-danger{% endif %}">
+                                            {{ app[5] }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <h5>No applications yet</h5>
+                        <p class="text-muted">Start applying to jobs that match your skills</p>
+                        <a href="/jobs" class="btn btn-primary">Browse Jobs</a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

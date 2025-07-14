@@ -1,0 +1,90 @@
+
+{% extends "base.html" %}
+
+{% block title %}Reports - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>System Reports</h2>
+        <p class="lead">Analytics and system insights</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="card dashboard-card">
+            <h5>Total Candidates</h5>
+            <h3 class="text-primary">{{ stats.total_candidates }}</h3>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card dashboard-card">
+            <h5>Total Recruiters</h5>
+            <h3 class="text-warning">{{ stats.total_recruiters }}</h3>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card dashboard-card">
+            <h5>Active Jobs</h5>
+            <h3 class="text-success">{{ stats.active_jobs }}</h3>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card dashboard-card">
+            <h5>Total Applications</h5>
+            <h3 class="text-info">{{ stats.total_applications }}</h3>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Monthly Applications</h5>
+            </div>
+            <div class="card-body">
+                {% if stats.monthly_applications %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th>Applications</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for month_data in stats.monthly_applications %}
+                                <tr>
+                                    <td>{{ month_data[0] }}</td>
+                                    <td>{{ month_data[1] }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">No application data available</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5>Report Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary">Export User Report</button>
+                    <button class="btn btn-outline-success">Export Job Report</button>
+                    <button class="btn btn-outline-info">Export Application Report</button>
+                    <button class="btn btn-outline-warning">System Analytics</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

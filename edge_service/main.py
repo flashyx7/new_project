@@ -618,6 +618,459 @@ async def apply_to_job(request: Request, job_id: int, cover_letter: str = Form(.
             content={"detail": "Application submission failed"}
         )
 
+# Recruiter routes
+@app.get("/recruiter/post-job", response_class=HTMLResponse)
+async def post_job_page(request: Request):
+    """Post new job page."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 3:
+        return RedirectResponse(url="/login", status_code=302)
+    
+    return templates.TemplateResponse("post_job.html", {"request": request, "user": user})
+
+@app.post("/recruiter/post-job")
+async def create_job_posting(
+    request: Request,
+    title: str = Form(...),
+    description: str = Form(...),
+    location: str = Form(...),
+    salary_min: float = Form(None),
+    salary_max: float = Form(None),
+    employment_type: str = Form(...),
+    experience_level: str = Form(...)
+):
+    """Create a new job posting."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 3:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            INSERT INTO job_posting (title, description, location, salary_min, salary_max, 
+                                   employment_type, experience_level, posted_by, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active')
+        """, (title, description, location, salary_min, salary_max, employment_type, experience_level, user["person_id"]))
+
+        conn.commit()
+        conn.close()
+
+        return RedirectResponse(url="/recruiter/my-jobs?success=Job posted successfully", status_code=302)
+
+    except Exception as e:
+        logger.error("Job posting failed", error=str(e))
+        return templates.TemplateResponse("post_job.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to post job. Please try again."
+        })
+
+@app.get("/recruiter/my-jobs", response_class=HTMLResponse)
+async def my_jobs_page(request: Request):
+    """My job postings page."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 3:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT id, title, description, location, salary_min, salary_max, 
+                   employment_type, experience_level, status, created_at
+            FROM job_posting 
+            WHERE posted_by = ?
+            ORDER BY created_at DESC
+        """, (user["person_id"],))
+
+        jobs = cursor.fetchall()
+        conn.close()
+
+        return templates.TemplateResponse("my_jobs.html", {
+            "request": request,
+            "user": user,
+            "jobs": jobs
+        })
+
+    except Exception as e:
+        logger.error("Failed to load jobs", error=str(e))
+        return templates.TemplateResponse("my_jobs.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load job postings"
+        })
+
+@app.get("/recruiter/applications", response_class=HTMLResponse)
+async def recruiter_applications(request: Request):
+    """View applications for recruiter's jobs."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 3:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT a.id, p.firstname, p.lastname, jp.title, a.applied_date, 
+                   ast.name as status, a.cover_letter
+            FROM application a
+            JOIN person p ON a.person_id = p.id
+            JOIN job_posting jp ON a.job_posting_id = jp.id
+            JOIN application_status ast ON a.status_id = ast.id
+            WHERE jp.posted_by = ?
+            ORDER BY a.applied_date DESC
+        """, (user["person_id"],))
+
+        applications = cursor.fetchall()
+        conn.close()
+
+        return templates.TemplateResponse("recruiter_applications.html", {
+            "request": request,
+            "user": user,
+            "applications": applications
+        })
+
+    except Exception as e:
+        logger.error("Failed to load applications", error=str(e))
+        return templates.TemplateResponse("recruiter_applications.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load applications"
+        })
+
+@app.get("/recruiter/candidates", response_class=HTMLResponse)
+async def browse_candidates(request: Request):
+    """Browse candidates page."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 3:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT p.id, p.firstname, p.lastname, p.email, 
+                   COUNT(a.id) as application_count
+            FROM person p
+            LEFT JOIN application a ON p.id = a.person_id
+            WHERE p.role_id = 2
+            GROUP BY p.id, p.firstname, p.lastname, p.email
+            ORDER BY p.firstname, p.lastname
+        """)
+
+        candidates = cursor.fetchall()
+        conn.close()
+
+        return templates.TemplateResponse("browse_candidates.html", {
+            "request": request,
+            "user": user,
+            "candidates": candidates
+        })
+
+    except Exception as e:
+        logger.error("Failed to load candidates", error=str(e))
+        return templates.TemplateResponse("browse_candidates.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load candidates"
+        })
+
+# Applicant routes
+@app.get("/applicant/my-applications", response_class=HTMLResponse)
+async def my_applications(request: Request):
+    """My applications page."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 2:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT a.id, jp.title, jp.location, jp.employment_type, 
+                   a.applied_date, ast.name as status
+            FROM application a
+            JOIN job_posting jp ON a.job_posting_id = jp.id
+            JOIN application_status ast ON a.status_id = ast.id
+            WHERE a.person_id = ?
+            ORDER BY a.applied_date DESC
+        """, (user["person_id"],))
+
+        applications = cursor.fetchall()
+        conn.close()
+
+        return templates.TemplateResponse("my_applications.html", {
+            "request": request,
+            "user": user,
+            "applications": applications
+        })
+
+    except Exception as e:
+        logger.error("Failed to load applications", error=str(e))
+        return templates.TemplateResponse("my_applications.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load applications"
+        })
+
+@app.get("/applicant/profile", response_class=HTMLResponse)
+async def profile_page(request: Request):
+    """Profile page."""
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT firstname, lastname, email, date_of_birth, phone, address
+            FROM person WHERE id = ?
+        """, (user["person_id"],))
+
+        profile = cursor.fetchone()
+        conn.close()
+
+        return templates.TemplateResponse("profile.html", {
+            "request": request,
+            "user": user,
+            "profile": profile
+        })
+
+    except Exception as e:
+        logger.error("Failed to load profile", error=str(e))
+        return templates.TemplateResponse("profile.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load profile"
+        })
+
+@app.get("/job/{job_id}", response_class=HTMLResponse)
+async def job_details(request: Request, job_id: int):
+    """Job details page."""
+    user = get_current_user(request)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT j.id, j.title, j.description, j.location, j.salary_min, j.salary_max,
+                   j.employment_type, j.experience_level, j.requirements, j.created_at,
+                   p.firstname, p.lastname
+            FROM job_posting j
+            JOIN person p ON j.posted_by = p.id
+            WHERE j.id = ? AND j.status = 'active'
+        """, (job_id,))
+
+        job = cursor.fetchone()
+        
+        # Check if user already applied
+        applied = False
+        if user:
+            cursor.execute(
+                "SELECT id FROM application WHERE person_id = ? AND job_posting_id = ?",
+                (user["person_id"], job_id)
+            )
+            applied = cursor.fetchone() is not None
+
+        conn.close()
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        return templates.TemplateResponse("job_details.html", {
+            "request": request,
+            "user": user,
+            "job": job,
+            "applied": applied
+        })
+
+    except Exception as e:
+        logger.error("Failed to load job details", error=str(e))
+        return templates.TemplateResponse("error.html", {
+            "request": request,
+            "user": user,
+            "error": "Job not found"
+        })
+
+# Admin routes
+@app.get("/admin/users", response_class=HTMLResponse)
+async def manage_users(request: Request):
+    """Manage users page."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT p.id, p.firstname, p.lastname, p.email, r.name as role,
+                   c.username, p.created_at
+            FROM person p
+            JOIN role r ON p.role_id = r.id
+            LEFT JOIN credential c ON p.id = c.person_id
+            ORDER BY p.created_at DESC
+        """)
+
+        users = cursor.fetchall()
+        conn.close()
+
+        return templates.TemplateResponse("manage_users.html", {
+            "request": request,
+            "user": user,
+            "users": users
+        })
+
+    except Exception as e:
+        logger.error("Failed to load users", error=str(e))
+        return templates.TemplateResponse("manage_users.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load users"
+        })
+
+@app.get("/admin/jobs", response_class=HTMLResponse)
+async def manage_jobs(request: Request):
+    """Manage jobs page."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT j.id, j.title, j.location, j.employment_type, j.status,
+                   p.firstname, p.lastname, j.created_at,
+                   COUNT(a.id) as application_count
+            FROM job_posting j
+            JOIN person p ON j.posted_by = p.id
+            LEFT JOIN application a ON j.id = a.job_posting_id
+            GROUP BY j.id, j.title, j.location, j.employment_type, j.status,
+                     p.firstname, p.lastname, j.created_at
+            ORDER BY j.created_at DESC
+        """)
+
+        jobs = cursor.fetchall()
+        conn.close()
+
+        return templates.TemplateResponse("manage_jobs.html", {
+            "request": request,
+            "user": user,
+            "jobs": jobs
+        })
+
+    except Exception as e:
+        logger.error("Failed to load jobs", error=str(e))
+        return templates.TemplateResponse("manage_jobs.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load jobs"
+        })
+
+@app.get("/admin/applications", response_class=HTMLResponse)
+async def admin_applications(request: Request):
+    """View all applications."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT a.id, p.firstname, p.lastname, jp.title, 
+                   rec.firstname as rec_firstname, rec.lastname as rec_lastname,
+                   a.applied_date, ast.name as status
+            FROM application a
+            JOIN person p ON a.person_id = p.id
+            JOIN job_posting jp ON a.job_posting_id = jp.id
+            JOIN person rec ON jp.posted_by = rec.id
+            JOIN application_status ast ON a.status_id = ast.id
+            ORDER BY a.applied_date DESC
+        """)
+
+        applications = cursor.fetchall()
+        conn.close()
+
+        return templates.TemplateResponse("admin_applications.html", {
+            "request": request,
+            "user": user,
+            "applications": applications
+        })
+
+    except Exception as e:
+        logger.error("Failed to load applications", error=str(e))
+        return templates.TemplateResponse("admin_applications.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load applications"
+        })
+
+@app.get("/admin/reports", response_class=HTMLResponse)
+async def generate_reports(request: Request):
+    """Generate reports page."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Get statistics for reports
+        stats = {}
+        
+        cursor.execute("SELECT COUNT(*) FROM person WHERE role_id = 2")
+        stats["total_candidates"] = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM person WHERE role_id = 3")
+        stats["total_recruiters"] = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM job_posting WHERE status = 'active'")
+        stats["active_jobs"] = cursor.fetchone()[0]
+        
+        cursor.execute("SELECT COUNT(*) FROM application")
+        stats["total_applications"] = cursor.fetchone()[0]
+        
+        # Monthly application stats
+        cursor.execute("""
+            SELECT strftime('%Y-%m', applied_date) as month, COUNT(*) as count
+            FROM application
+            GROUP BY strftime('%Y-%m', applied_date)
+            ORDER BY month DESC
+            LIMIT 12
+        """)
+        stats["monthly_applications"] = cursor.fetchall()
+
+        conn.close()
+
+        return templates.TemplateResponse("reports.html", {
+            "request": request,
+            "user": user,
+            "stats": stats
+        })
+
+    except Exception as e:
+        logger.error("Failed to load reports", error=str(e))
+        return templates.TemplateResponse("reports.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load reports"
+        })
+
 @app.get("/logout")
 async def logout(request: Request):
     """Logout user."""

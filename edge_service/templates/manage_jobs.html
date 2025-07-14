@@ -1,0 +1,70 @@
+
+{% extends "base.html" %}
+
+{% block title %}Manage Jobs - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Manage Jobs</h2>
+        <p class="lead">Job posting management and oversight</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-body">
+                {% if jobs %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Job Title</th>
+                                    <th>Location</th>
+                                    <th>Type</th>
+                                    <th>Posted By</th>
+                                    <th>Applications</th>
+                                    <th>Status</th>
+                                    <th>Posted Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for job in jobs %}
+                                <tr>
+                                    <td>{{ job[1] }}</td>
+                                    <td>{{ job[2] }}</td>
+                                    <td>{{ job[3] }}</td>
+                                    <td>{{ job[5] }} {{ job[6] }}</td>
+                                    <td>{{ job[8] }}</td>
+                                    <td>
+                                        <span class="badge {% if job[4] == 'active' %}bg-success{% else %}bg-secondary{% endif %}">
+                                            {{ job[4] }}
+                                        </span>
+                                    </td>
+                                    <td>{{ job[7] }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary">View</button>
+                                        <button class="btn btn-sm btn-outline-warning">Edit</button>
+                                        <button class="btn btn-sm btn-outline-danger">Deactivate</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <h5>No jobs found</h5>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

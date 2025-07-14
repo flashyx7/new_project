@@ -1,0 +1,69 @@
+
+{% extends "base.html" %}
+
+{% block title %}{{ job[1] }} - Job Details{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+                <h2>{{ job[1] }}</h2>
+                <p class="lead text-muted">{{ job[3] }} • {{ job[6] }}</p>
+                
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <strong>Employment Type:</strong> {{ job[6] }}<br>
+                        <strong>Experience Level:</strong> {{ job[7] }}<br>
+                        <strong>Location:</strong> {{ job[3] }}
+                    </div>
+                    <div class="col-md-6">
+                        {% if job[4] and job[5] %}
+                            <strong>Salary:</strong> ${{ job[4] }} - ${{ job[5] }}<br>
+                        {% endif %}
+                        <strong>Posted by:</strong> {{ job[10] }} {{ job[11] }}<br>
+                        <strong>Posted:</strong> {{ job[9] }}
+                    </div>
+                </div>
+                
+                <h5>Job Description</h5>
+                <p>{{ job[2] }}</p>
+                
+                {% if job[8] %}
+                    <h5>Requirements</h5>
+                    <p>{{ job[8] }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                {% if user and user.role_id == 2 %}
+                    {% if applied %}
+                        <div class="alert alert-success">
+                            <strong>Applied!</strong> You have already applied to this job.
+                        </div>
+                    {% else %}
+                        <h5>Apply for this Job</h5>
+                        <form method="POST" action="/jobs/{{ job[0] }}/apply">
+                            <div class="mb-3">
+                                <label for="cover_letter" class="form-label">Cover Letter</label>
+                                <textarea class="form-control" id="cover_letter" name="cover_letter" 
+                                          rows="5" placeholder="Tell us why you're interested in this position..."></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100">Apply Now</button>
+                        </form>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-info">
+                        <strong>Login Required</strong><br>
+                        Please <a href="/login">login</a> as an applicant to apply for this job.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

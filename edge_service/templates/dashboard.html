@@ -87,6 +87,19 @@
     <div class="col-md-4">
         <div class="card">
             <div class="card-header">
+                <h5>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="/applicant/my-applications" class="btn btn-primary">My Applications</a>
+                    <a href="/applicant/profile" class="btn btn-outline-primary">Profile Status</a>
+                    <a href="/jobs" class="btn btn-outline-success">Job Matches</a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-header">
                 <h5>Recommended Jobs</h5>
             </div>
             <div class="card-body">
@@ -96,7 +109,7 @@
                         <h6 class="mb-1">{{ job[1] }}</h6>
                         <p class="small text-muted mb-1">{{ job[3] }} • {{ job[4] }}</p>
                         <p class="small">{{ job[2][:80] }}...</p>
-                        <a href="/jobs" class="btn btn-sm btn-outline-primary">View Details</a>
+                        <a href="/job/{{ job[0] }}" class="btn btn-sm btn-outline-primary">View Details</a>
                     </div>
                     {% endfor %}
                 {% else %}

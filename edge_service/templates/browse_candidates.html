@@ -1,0 +1,58 @@
+
+{% extends "base.html" %}
+
+{% block title %}Browse Candidates - Recruitment System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Browse Candidates</h2>
+        <p class="lead">View and search candidates</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-body">
+                {% if candidates %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Applications Count</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for candidate in candidates %}
+                                <tr>
+                                    <td>{{ candidate[1] }} {{ candidate[2] }}</td>
+                                    <td>{{ candidate[3] }}</td>
+                                    <td>{{ candidate[4] }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary">View Profile</button>
+                                        <button class="btn btn-sm btn-outline-success">Contact</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <h5>No candidates found</h5>
+                        <p class="text-muted">Candidates will appear here as they register</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

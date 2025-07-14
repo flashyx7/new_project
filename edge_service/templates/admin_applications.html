@@ -1,0 +1,58 @@
+
+{% extends "base.html" %}
+
+{% block title %}All Applications - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>All Applications</h2>
+        <p class="lead">System-wide application overview</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-body">
+                {% if applications %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Applicant</th>
+                                    <th>Job</th>
+                                    <th>Recruiter</th>
+                                    <th>Applied Date</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for app in applications %}
+                                <tr>
+                                    <td>{{ app[1] }} {{ app[2] }}</td>
+                                    <td>{{ app[3] }}</td>
+                                    <td>{{ app[4] }} {{ app[5] }}</td>
+                                    <td>{{ app[6] }}</td>
+                                    <td>
+                                        <span class="badge bg-info">{{ app[7] }}</span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <h5>No applications found</h5>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

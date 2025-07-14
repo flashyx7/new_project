@@ -1,0 +1,102 @@
+
+{% extends "base.html" %}
+
+{% block title %}Applications - Recruitment System{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Applications Received</h2>
+        <p class="lead">Manage applications to your job postings</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-body">
+                {% if applications %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Applicant</th>
+                                    <th>Job</th>
+                                    <th>Applied Date</th>
+                                    <th>Status</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for app in applications %}
+                                <tr>
+                                    <td>{{ app[1] }} {{ app[2] }}</td>
+                                    <td>{{ app[3] }}</td>
+                                    <td>{{ app[4] }}</td>
+                                    <td>
+                                        <span class="badge bg-info">{{ app[5] }}</span>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary" 
+                                                onclick="viewApplication({{ app[0] }})">View</button>
+                                        <button class="btn btn-sm btn-outline-success"
+                                                onclick="updateStatus({{ app[0] }}, 'interviewed')">Interview</button>
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                onclick="updateStatus({{ app[0] }}, 'rejected')">Reject</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <h5>No applications received yet</h5>
+                        <p class="text-muted">Applications will appear here when candidates apply to your jobs</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Application Modal -->
+<div class="modal fade" id="applicationModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Application Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="applicationDetails">
+                <!-- Application details will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function viewApplication(appId) {
+    // This would normally fetch application details via API
+    document.getElementById('applicationDetails').innerHTML = `
+        <p><strong>Application ID:</strong> ${appId}</p>
+        <p><strong>Cover Letter:</strong> Application details would be shown here in a full implementation.</p>
+    `;
+    new bootstrap.Modal(document.getElementById('applicationModal')).show();
+}
+
+function updateStatus(appId, status) {
+    if (confirm(`Are you sure you want to mark this application as ${status}?`)) {
+        // This would normally send an API request to update status
+        alert(`Application ${appId} marked as ${status}. In a full implementation, this would update the database.`);
+        location.reload();
+    }
+}
+</script>
+{% endblock %}

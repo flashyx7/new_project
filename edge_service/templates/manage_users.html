@@ -1,0 +1,65 @@
+
+{% extends "base.html" %}
+
+{% block title %}Manage Users - Admin Panel{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2>Manage Users</h2>
+        <p class="lead">User management and administration</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        
+        <div class="card">
+            <div class="card-body">
+                {% if users %}
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email</th>
+                                    <th>Username</th>
+                                    <th>Role</th>
+                                    <th>Joined</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for user_row in users %}
+                                <tr>
+                                    <td>{{ user_row[1] }} {{ user_row[2] }}</td>
+                                    <td>{{ user_row[3] }}</td>
+                                    <td>{{ user_row[5] or 'N/A' }}</td>
+                                    <td>
+                                        <span class="badge {% if user_row[4] == 'Admin' %}bg-danger{% elif user_row[4] == 'Recruiter' %}bg-warning{% else %}bg-primary{% endif %}">
+                                            {{ user_row[4] }}
+                                        </span>
+                                    </td>
+                                    <td>{{ user_row[6] }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary">Edit</button>
+                                        <button class="btn btn-sm btn-outline-danger">Disable</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-5">
+                        <h5>No users found</h5>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
