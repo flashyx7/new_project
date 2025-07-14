@@ -14,7 +14,14 @@ from datetime import datetime, date, timedelta
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from shared.security import get_password_hash
+try:
+    from shared.security import get_password_hash
+except ImportError:
+    # Fallback if security module is not available
+    import bcrypt
+    def get_password_hash(password: str) -> str:
+        salt = bcrypt.gensalt()
+        return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
 # Configure logging
 structlog.configure(

@@ -1,81 +1,108 @@
+
 """
-Database configuration and connection management.
+Database connection and utilities for the Recruitment System.
 """
 
-import os
 import sqlite3
-from sqlalchemy import create_engine, text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+import os
 import structlog
+from contextlib import contextmanager
+from typing import Optional, Dict, Any, List
 
 logger = structlog.get_logger()
 
-# SQLite database configuration
-DATABASE_URL = "sqlite:///./recruitment_system.db"
+# Database configuration
+DB_PATH = "recruitment_system.db"
 
-# Create engine
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False},  # SQLite specific
-    echo=False  # Set to True for SQL debugging
-)
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-def get_db():
-    """Get database session."""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-def test_database_connection():
-    """Test database connection."""
-    try:
-        with engine.connect() as connection:
-            result = connection.execute(text("SELECT 1"))
-            if result.fetchone()[0] == 1:
-                logger.info("Database connection test successful")
+class DatabaseManager:
+    """Manage database connections and operations."""
+    
+    def __init__(self, db_path: str = DB_PATH):
+        self.db_path = db_path
+        self._ensure_database_exists()
+    
+    def _ensure_database_exists(self):
+        """Ensure database file exists."""
+        if not os.path.exists(self.db_path):
+            logger.warning("Database file not found, creating new one", path=self.db_path)
+            # Create empty database
+            conn = sqlite3.connect(self.db_path)
+            conn.close()
+    
+    @contextmanager
+    def get_connection(self):
+        """Get database connection with context manager."""
+        conn = None
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row  # Enable dict-like access
+            conn.execute("PRAGMA foreign_keys = ON")  # Enable foreign key constraints
+            yield conn
+            conn.commit()
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            logger.error("Database operation failed", error=str(e))
+            raise
+        finally:
+            if conn:
+                conn.close()
+    
+    def execute_query(self, query: str, params: tuple = None) -> List[Dict[str, Any]]:
+        """Execute a SELECT query and return results."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            
+            # Convert rows to dictionaries
+            columns = [description[0] for description in cursor.description]
+            results = []
+            for row in cursor.fetchall():
+                results.append(dict(zip(columns, row)))
+            
+            return results
+    
+    def execute_update(self, query: str, params: tuple = None) -> int:
+        """Execute an INSERT, UPDATE, or DELETE query."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            return cursor.rowcount
+    
+    def execute_insert(self, query: str, params: tuple = None) -> int:
+        """Execute an INSERT query and return the last row ID."""
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            if params:
+                cursor.execute(query, params)
+            else:
+                cursor.execute(query)
+            return cursor.lastrowid
+    
+    def health_check(self) -> bool:
+        """Check database health."""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1")
                 return True
-        return False
-    except Exception as e:
-        logger.error("Database connection test failed", error=str(e))
-        return False
+        except Exception as e:
+            logger.error("Database health check failed", error=str(e))
+            return False
 
-def init_db():
-    """Initialize database tables."""
-    try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully")
-        return True
-    except Exception as e:
-        logger.error("Database initialization failed", error=str(e))
-        return False
+# Global database manager instance
+db_manager = DatabaseManager()
 
-def execute_sql_file(file_path):
-    """Execute SQL file directly using sqlite3."""
-    if not os.path.exists(file_path):
-        logger.error("SQL file not found", path=file_path)
-        return False
+def get_db_connection():
+    """Get database connection (for backward compatibility)."""
+    return db_manager.get_connection()
 
-    try:
-        conn = sqlite3.connect("recruitment_system.db")
-        cursor = conn.cursor()
-
-        with open(file_path, 'r') as f:
-            sql_content = f.read()
-
-        # Execute SQL statements
-        cursor.executescript(sql_content)
-        conn.commit()
-        conn.close()
-
-        logger.info("SQL file executed successfully", path=file_path)
-        return True
-
-    except Exception as e:
-        logger.error("SQL file execution failed", path=file_path, error=str(e))
-        return False
+def test_connection() -> bool:
+    """Test database connection."""
+    return db_manager.health_check()

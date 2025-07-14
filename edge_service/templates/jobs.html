@@ -1,111 +1,233 @@
+
 {% extends "base.html" %}
 
-{% block title %}Available Jobs{% endblock %}
+{% block title %}Jobs - Recruitment System{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <div class="row">
-        <div class="col-md-12">
-            <h1>Available Positions</h1>
-            <p class="text-muted">Explore exciting career opportunities</p>
-        </div>
-    </div>
+<div id="alertContainer"></div>
 
-    {% if error %}
-    <div class="alert alert-danger" role="alert">
-        {{ error }}
-    </div>
-    {% endif %}
-
-    <div class="row mt-4">
-        {% if jobs %}
-            {% for job in jobs %}
-            <div class="col-md-6 mb-4">
-                <div class="card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="card-title mb-0">{{ job[1] }}</h5>
-                        <span class="badge badge-primary">{{ job[8] or 'General' }}</span>
-                    </div>
-                    <div class="card-body">
-                        <p class="card-text">{{ job[2][:150] }}{% if job[2]|length > 150 %}...{% endif %}</p>
-
-                        <div class="job-details">
-                            <p><strong>Location:</strong> {{ job[3] or 'Not specified' }}</p>
-                            <p><strong>Type:</strong> {{ job[6].title() if job[6] else 'Full-time' }}</p>
-                            <p><strong>Level:</strong> {{ job[7].title() if job[7] else 'Mid' }}</p>
-                            {% if job[4] and job[5] %}
-                            <p><strong>Salary:</strong> ${{ "{:,.0f}".format(job[4]) }} - ${{ "{:,.0f}".format(job[5]) }}</p>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div class="card-footer">
-                        <div class="btn-group" role="group">
-                            <button type="button" class="btn btn-outline-info btn-sm" 
-                                    onclick="viewJobDetails({{ job[0] }})">
-                                View Details
-                            </button>
-                            {% if user and user.role_id == 2 %}
-                            <button type="button" class="btn btn-primary btn-sm"
-                                    onclick="applyForJob({{ job[0] }})">
-                                Apply Now
-                            </button>
-                            {% endif %}
-                        </div>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        {% else %}
-            <div class="col-md-12">
-                <div class="alert alert-info" role="alert">
-                    <h4 class="alert-heading">No Jobs Available</h4>
-                    <p>There are currently no active job postings. Please check back later!</p>
-                </div>
-            </div>
-        {% endif %}
+<div class="row">
+    <div class="col-12">
+        <h2>Available Jobs</h2>
+        <p class="lead">Discover exciting career opportunities.</p>
     </div>
 </div>
 
-<!-- Job Details Modal -->
-<div class="modal fade" id="jobDetailsModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-lg" role="document">
+<div class="row mb-4">
+    <div class="col-md-6">
+        <input type="text" id="searchInput" class="form-control" placeholder="Search jobs...">
+    </div>
+    <div class="col-md-3">
+        <select id="locationFilter" class="form-select">
+            <option value="">All Locations</option>
+            <option value="Remote">Remote</option>
+            <option value="San Francisco, CA">San Francisco, CA</option>
+            <option value="New York, NY">New York, NY</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select id="typeFilter" class="form-select">
+            <option value="">All Types</option>
+            <option value="full-time">Full Time</option>
+            <option value="part-time">Part Time</option>
+            <option value="contract">Contract</option>
+        </select>
+    </div>
+</div>
+
+<div id="jobsContainer" class="row">
+    <div class="col-12 text-center">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading jobs...</span>
+        </div>
+    </div>
+</div>
+
+<!-- Job Application Modal -->
+<div class="modal fade" id="applicationModal" tabindex="-1">
+    <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="jobModalTitle">Job Details</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <h5 class="modal-title">Apply for Position</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
-            <div class="modal-body" id="jobModalBody">
-                Loading...
+            <div class="modal-body">
+                <form id="applicationForm">
+                    <input type="hidden" id="jobId" name="job_id">
+                    <div class="mb-3">
+                        <label for="coverLetter" class="form-label">Cover Letter</label>
+                        <textarea class="form-control" id="coverLetter" name="cover_letter" rows="5" required
+                                  placeholder="Tell us why you're interested in this position..."></textarea>
+                    </div>
+                </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                {% if user and user.role_id == 2 %}
-                <button type="button" class="btn btn-primary" id="applyFromModalBtn">Apply Now</button>
-                {% endif %}
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitApplication()">Submit Application</button>
             </div>
         </div>
     </div>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-function viewJobDetails(jobId) {
-    // In a real implementation, this would fetch job details via API
-    $('#jobDetailsModal').modal('show');
-    $('#jobModalBody').html('<p>Detailed job information would be loaded here...</p>');
+let allJobs = [];
+let applicationModal;
+
+document.addEventListener('DOMContentLoaded', async function() {
+    applicationModal = new bootstrap.Modal(document.getElementById('applicationModal'));
+    
+    await loadJobs();
+    setupFilters();
+});
+
+async function loadJobs() {
+    try {
+        const response = await fetch('/api/jobs');
+        const data = await response.json();
+        allJobs = data.jobs;
+        displayJobs(allJobs);
+    } catch (error) {
+        console.error('Failed to load jobs:', error);
+        document.getElementById('jobsContainer').innerHTML = `
+            <div class="col-12">
+                <div class="alert alert-danger">Failed to load jobs. Please try again later.</div>
+            </div>
+        `;
+    }
 }
 
-function applyForJob(jobId) {
-    {% if user %}
-        if (confirm('Are you sure you want to apply for this position?')) {
-            // In a real implementation, this would submit the application
-            alert('Application submitted successfully!');
+function displayJobs(jobs) {
+    const container = document.getElementById('jobsContainer');
+    
+    if (jobs.length === 0) {
+        container.innerHTML = `
+            <div class="col-12">
+                <div class="alert alert-info">No jobs found matching your criteria.</div>
+            </div>
+        `;
+        return;
+    }
+    
+    const jobsHtml = jobs.map(job => `
+        <div class="col-lg-6 mb-4">
+            <div class="card job-card h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h5 class="card-title mb-0">${job.title}</h5>
+                        <span class="badge bg-primary">${job.experience_level}</span>
+                    </div>
+                    
+                    <p class="text-muted small mb-2">
+                        <i class="fas fa-map-marker-alt"></i> ${job.location}
+                        ${job.remote_allowed ? ' • Remote OK' : ''}
+                    </p>
+                    
+                    <p class="card-text">${job.description.substring(0, 150)}...</p>
+                    
+                    ${job.salary_min && job.salary_max ? `
+                        <p class="text-success mb-2">
+                            <strong>${RecruitmentApp.formatCurrency(job.salary_min)} - ${RecruitmentApp.formatCurrency(job.salary_max)}</strong>
+                        </p>
+                    ` : ''}
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">Posted ${RecruitmentApp.formatDate(job.created_at)}</small>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary me-2" onclick="viewJobDetails(${job.job_posting_id})">
+                                View Details
+                            </button>
+                            <button class="btn btn-sm btn-primary" onclick="openApplicationModal(${job.job_posting_id}, '${job.title}')">
+                                Apply Now
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = jobsHtml;
+}
+
+function setupFilters() {
+    const searchInput = document.getElementById('searchInput');
+    const locationFilter = document.getElementById('locationFilter');
+    const typeFilter = document.getElementById('typeFilter');
+    
+    const filterJobs = () => {
+        const searchTerm = searchInput.value.toLowerCase();
+        const locationValue = locationFilter.value;
+        const typeValue = typeFilter.value;
+        
+        const filteredJobs = allJobs.filter(job => {
+            const matchesSearch = job.title.toLowerCase().includes(searchTerm) ||
+                                job.description.toLowerCase().includes(searchTerm);
+            const matchesLocation = !locationValue || job.location.includes(locationValue);
+            const matchesType = !typeValue || job.employment_type === typeValue;
+            
+            return matchesSearch && matchesLocation && matchesType;
+        });
+        
+        displayJobs(filteredJobs);
+    };
+    
+    searchInput.addEventListener('input', filterJobs);
+    locationFilter.addEventListener('change', filterJobs);
+    typeFilter.addEventListener('change', filterJobs);
+}
+
+function openApplicationModal(jobId, jobTitle) {
+    if (!RecruitmentApp.user) {
+        RecruitmentApp.showAlert('Please login to apply for jobs', 'warning');
+        setTimeout(() => {
+            window.location.href = '/login';
+        }, 2000);
+        return;
+    }
+    
+    document.getElementById('jobId').value = jobId;
+    document.querySelector('#applicationModal .modal-title').textContent = `Apply for: ${jobTitle}`;
+    document.getElementById('coverLetter').value = '';
+    applicationModal.show();
+}
+
+async function submitApplication() {
+    const jobId = document.getElementById('jobId').value;
+    const coverLetter = document.getElementById('coverLetter').value;
+    
+    if (!coverLetter.trim()) {
+        RecruitmentApp.showAlert('Please provide a cover letter', 'warning');
+        return;
+    }
+    
+    try {
+        const formData = new FormData();
+        formData.append('cover_letter', coverLetter);
+        
+        const response = await fetch(`/api/jobs/${jobId}/apply`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (response.ok) {
+            RecruitmentApp.showAlert('Application submitted successfully!', 'success');
+            applicationModal.hide();
+        } else {
+            RecruitmentApp.showAlert(data.detail || 'Application failed', 'danger');
         }
-    {% else %}
-        alert('Please log in to apply for jobs.');
-        window.location.href = '/login';
-    {% endif %}
+    } catch (error) {
+        console.error('Application submission failed:', error);
+        RecruitmentApp.showAlert('Application submission failed', 'danger');
+    }
+}
+
+function viewJobDetails(jobId) {
+    // In a full implementation, this would open a detailed job view
+    RecruitmentApp.showAlert('Job details view would open here in a full implementation', 'info');
 }
 </script>
 {% endblock %}

@@ -1,300 +1,349 @@
 
 -- Enhanced Recruitment System Database Schema for SQLite
--- Supports: user management, resume parsing, job posting, candidate matching, 
--- interview scheduling, offer generation
 
--- Core user roles
-DROP TABLE IF EXISTS `role`;
-CREATE TABLE `role` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `name` VARCHAR(45) NOT NULL,
-  `description` VARCHAR(255)
+-- Enable foreign key constraints
+PRAGMA foreign_keys = ON;
+
+-- Drop tables if they exist (reverse order due to dependencies)
+DROP TABLE IF EXISTS application_audit;
+DROP TABLE IF EXISTS system_config;
+DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS competence_profile;
+DROP TABLE IF EXISTS availability;
+DROP TABLE IF EXISTS application;
+DROP TABLE IF EXISTS job_skill_requirement;
+DROP TABLE IF EXISTS job_posting;
+DROP TABLE IF EXISTS job_category;
+DROP TABLE IF EXISTS application_status;
+DROP TABLE IF EXISTS credential;
+DROP TABLE IF EXISTS person;
+DROP TABLE IF EXISTS competence;
+DROP TABLE IF EXISTS role;
+
+-- Create roles table
+CREATE TABLE role (
+    role_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT,
+    permissions TEXT, -- JSON string of permissions
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Insert default roles
-INSERT INTO `role` (`id`, `name`, `description`) VALUES
-(1, 'Recruiter', 'HR personnel who manage job postings and candidates'),
-(2, 'Applicant', 'Job seekers who apply for positions'),
-(3, 'Admin', 'System administrators'),
-(4, 'Hiring Manager', 'Department heads who approve hires');
+INSERT INTO role (role_id, name, description, permissions) VALUES
+(1, 'recruiter', 'Recruiter role with job posting and application management permissions', '["create_job", "view_applications", "update_application_status", "view_candidates"]'),
+(2, 'applicant', 'Job applicant role with application submission permissions', '["apply_job", "view_own_applications", "update_profile"]'),
+(3, 'admin', 'Administrator role with full system access', '["*"]'),
+(4, 'hiring_manager', 'Hiring manager role with interview and decision permissions', '["view_applications", "schedule_interviews", "make_hiring_decisions"]');
 
--- Person entity
-DROP TABLE IF EXISTS `person`;
-CREATE TABLE `person` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `firstname` VARCHAR(45) DEFAULT NULL,
-  `lastname` VARCHAR(45) DEFAULT NULL,
-  `date_of_birth` DATE DEFAULT NULL,
-  `email` VARCHAR(100) UNIQUE DEFAULT NULL,
-  `phone` VARCHAR(20) DEFAULT NULL,
-  `address` TEXT DEFAULT NULL,
-  `linkedin_url` VARCHAR(255) DEFAULT NULL,
-  `portfolio_url` VARCHAR(255) DEFAULT NULL,
-  `role_id` INTEGER DEFAULT 2,
-  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `is_active` BOOLEAN DEFAULT 1,
-  FOREIGN KEY (`role_id`) REFERENCES `role` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
+-- Create competence table
+CREATE TABLE competence (
+    competence_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    category VARCHAR(50),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Credentials
-DROP TABLE IF EXISTS `credential`;
-CREATE TABLE `credential` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `person_id` INTEGER NOT NULL,
-  `username` VARCHAR(45) NOT NULL UNIQUE,
-  `password` VARCHAR(255) NOT NULL,
-  `last_login` DATETIME DEFAULT NULL,
-  `password_reset_token` VARCHAR(255) DEFAULT NULL,
-  `password_reset_expires` DATETIME DEFAULT NULL,
-  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+-- Insert sample competencies
+INSERT INTO competence (competence_id, name, description, category) VALUES
+(1, 'Python', 'Python programming language', 'Programming'),
+(2, 'JavaScript', 'JavaScript programming language', 'Programming'),
+(3, 'React', 'React.js frontend framework', 'Frontend'),
+(4, 'Node.js', 'Node.js backend runtime', 'Backend'),
+(5, 'SQL', 'Structured Query Language for databases', 'Database'),
+(6, 'Project Management', 'Managing projects and teams', 'Management'),
+(7, 'Communication', 'Verbal and written communication skills', 'Soft Skills');
+
+-- Create person table
+CREATE TABLE person (
+    person_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    firstname VARCHAR(100) NOT NULL,
+    lastname VARCHAR(100) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    phone VARCHAR(20),
+    address TEXT,
+    date_of_birth DATE,
+    role_id INTEGER NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    profile_picture_url VARCHAR(500),
+    linkedin_url VARCHAR(500),
+    portfolio_url VARCHAR(500),
+    resume_url VARCHAR(500),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (role_id) REFERENCES role(role_id)
 );
 
--- Job categories
-DROP TABLE IF EXISTS `job_category`;
-CREATE TABLE `job_category` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `name` VARCHAR(100) NOT NULL,
-  `description` TEXT
+-- Create credential table
+CREATE TABLE credential (
+    credential_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id INTEGER NOT NULL,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    last_login TIMESTAMP,
+    password_reset_token VARCHAR(255),
+    password_reset_expires TIMESTAMP,
+    is_verified BOOLEAN DEFAULT FALSE,
+    verification_token VARCHAR(255),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (person_id) REFERENCES person(person_id) ON DELETE CASCADE
 );
 
-INSERT INTO `job_category` (`name`, `description`) VALUES
-('Software Development', 'Programming and software engineering roles'),
-('Data Science', 'Data analysis and machine learning positions'),
-('Product Management', 'Product strategy and management roles'),
-('Design', 'UI/UX and graphic design positions'),
-('Sales', 'Sales and business development roles'),
-('Marketing', 'Marketing and digital marketing positions'),
-('Human Resources', 'HR and talent acquisition roles'),
-('Finance', 'Financial and accounting positions');
-
--- Job postings
-DROP TABLE IF EXISTS `job_posting`;
-CREATE TABLE `job_posting` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `title` VARCHAR(255) NOT NULL,
-  `description` TEXT NOT NULL,
-  `requirements` TEXT,
-  `responsibilities` TEXT,
-  `salary_min` DECIMAL(10,2) DEFAULT NULL,
-  `salary_max` DECIMAL(10,2) DEFAULT NULL,
-  `currency` VARCHAR(3) DEFAULT 'USD',
-  `location` VARCHAR(255),
-  `remote_allowed` BOOLEAN DEFAULT 0,
-  `employment_type` VARCHAR(20) DEFAULT 'full-time',
-  `experience_level` VARCHAR(20) DEFAULT 'mid',
-  `category_id` INTEGER,
-  `posted_by` INTEGER NOT NULL,
-  `status` VARCHAR(20) DEFAULT 'draft',
-  `application_deadline` DATE,
-  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (`category_id`) REFERENCES `job_category` (`id`) ON DELETE SET NULL,
-  FOREIGN KEY (`posted_by`) REFERENCES `person` (`id`) ON DELETE CASCADE
+-- Create application status table
+CREATE TABLE application_status (
+    status_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT,
+    order_sequence INTEGER,
+    is_final BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Competences/Skills
-DROP TABLE IF EXISTS `competence`;
-CREATE TABLE `competence` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `name` VARCHAR(100) NOT NULL,
-  `category` VARCHAR(50) DEFAULT NULL,
-  `description` TEXT
+-- Insert application statuses
+INSERT INTO application_status (status_id, name, description, order_sequence, is_final) VALUES
+(1, 'submitted', 'Application has been submitted', 1, FALSE),
+(2, 'under_review', 'Application is being reviewed by HR', 2, FALSE),
+(3, 'interview_scheduled', 'Interview has been scheduled', 3, FALSE),
+(4, 'interviewed', 'Interview has been completed', 4, FALSE),
+(5, 'accepted', 'Application has been accepted', 5, TRUE),
+(6, 'rejected', 'Application has been rejected', 6, TRUE),
+(7, 'withdrawn', 'Application has been withdrawn by applicant', 7, TRUE);
+
+-- Create job category table
+CREATE TABLE job_category (
+    category_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    parent_category_id INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_category_id) REFERENCES job_category(category_id)
 );
 
-INSERT INTO `competence` (`name`, `category`, `description`) VALUES
-('Python', 'Programming', 'Python programming language'),
-('JavaScript', 'Programming', 'JavaScript programming language'),
-('React', 'Frontend', 'React.js framework'),
-('Node.js', 'Backend', 'Node.js runtime'),
-('SQL', 'Database', 'SQL database querying'),
-('Project Management', 'Management', 'Project management skills'),
-('Communication', 'Soft Skills', 'Communication and interpersonal skills'),
-('Leadership', 'Management', 'Team leadership abilities'),
-('Data Analysis', 'Analytics', 'Data analysis and interpretation'),
-('Machine Learning', 'AI/ML', 'Machine learning algorithms and models');
+-- Insert job categories
+INSERT INTO job_category (category_id, name, description) VALUES
+(1, 'Technology', 'Technology and software development roles'),
+(2, 'Marketing', 'Marketing and advertising roles'),
+(3, 'Sales', 'Sales and business development roles'),
+(4, 'Human Resources', 'HR and people management roles'),
+(5, 'Finance', 'Finance and accounting roles');
 
--- Resumes
-DROP TABLE IF EXISTS `resume`;
-CREATE TABLE `resume` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `person_id` INTEGER NOT NULL,
-  `file_path` VARCHAR(500),
-  `file_name` VARCHAR(255),
-  `file_size` BIGINT,
-  `content_text` TEXT,
-  `parsed_data` TEXT,
-  `upload_date` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `is_primary` BOOLEAN DEFAULT 0,
-  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
+-- Create job posting table
+CREATE TABLE job_posting (
+    job_posting_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title VARCHAR(200) NOT NULL,
+    description TEXT NOT NULL,
+    requirements TEXT,
+    responsibilities TEXT,
+    salary_min DECIMAL(12,2),
+    salary_max DECIMAL(12,2),
+    currency VARCHAR(3) DEFAULT 'USD',
+    location VARCHAR(200),
+    remote_allowed BOOLEAN DEFAULT FALSE,
+    employment_type VARCHAR(20) DEFAULT 'full-time', -- full-time, part-time, contract, internship
+    experience_level VARCHAR(20) DEFAULT 'mid', -- entry, mid, senior, executive
+    category_id INTEGER,
+    posted_by INTEGER NOT NULL,
+    status VARCHAR(20) DEFAULT 'active', -- active, paused, closed, draft
+    application_deadline DATE,
+    start_date DATE,
+    benefits TEXT,
+    company_description TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (category_id) REFERENCES job_category(category_id),
+    FOREIGN KEY (posted_by) REFERENCES person(person_id)
 );
 
--- Availability
-DROP TABLE IF EXISTS `availability`;
-CREATE TABLE `availability` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `person_id` INTEGER NOT NULL,
-  `from_date` DATE NOT NULL,
-  `to_date` DATE NOT NULL,
-  `is_flexible` BOOLEAN DEFAULT 0,
-  `notes` TEXT,
-  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
+-- Create job skill requirements table
+CREATE TABLE job_skill_requirement (
+    requirement_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_posting_id INTEGER NOT NULL,
+    competence_id INTEGER NOT NULL,
+    required_level VARCHAR(20) DEFAULT 'intermediate', -- beginner, intermediate, advanced, expert
+    min_years_experience DECIMAL(3,1) DEFAULT 0,
+    is_required BOOLEAN DEFAULT TRUE,
+    weight DECIMAL(3,2) DEFAULT 1.0, -- For scoring applications
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (job_posting_id) REFERENCES job_posting(job_posting_id) ON DELETE CASCADE,
+    FOREIGN KEY (competence_id) REFERENCES competence(competence_id),
+    UNIQUE(job_posting_id, competence_id)
 );
 
--- Application status
-DROP TABLE IF EXISTS `status`;
-CREATE TABLE `status` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `name` VARCHAR(45) NOT NULL,
-  `description` VARCHAR(255),
-  `order_index` INTEGER DEFAULT 0
+-- Create availability table
+CREATE TABLE availability (
+    availability_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id INTEGER NOT NULL,
+    from_date DATE NOT NULL,
+    to_date DATE,
+    is_flexible BOOLEAN DEFAULT TRUE,
+    notice_period_days INTEGER DEFAULT 30,
+    preferred_start_time TIME,
+    preferred_end_time TIME,
+    work_schedule_preference VARCHAR(50), -- full-time, part-time, flexible, remote
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (person_id) REFERENCES person(person_id) ON DELETE CASCADE
 );
 
-INSERT INTO `status` (`id`, `name`, `description`, `order_index`) VALUES
-(0, 'Submitted', 'Application has been submitted', 1),
-(1, 'Under Review', 'Application is being reviewed', 2),
-(2, 'Phone Screen', 'Initial phone screening scheduled', 3),
-(3, 'Technical Interview', 'Technical interview scheduled', 4),
-(4, 'Final Interview', 'Final interview with hiring manager', 5),
-(5, 'Offer Extended', 'Job offer has been extended', 6),
-(6, 'Hired', 'Candidate has been hired', 7),
-(7, 'Rejected', 'Application has been rejected', 8),
-(8, 'Withdrawn', 'Candidate withdrew application', 9);
-
--- Job applications
-DROP TABLE IF EXISTS `application`;
-CREATE TABLE `application` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `person_id` INTEGER NOT NULL,
-  `job_posting_id` INTEGER NOT NULL,
-  `resume_id` INTEGER,
-  `cover_letter` TEXT,
-  `date_of_registration` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `status_id` INTEGER DEFAULT 0,
-  `match_score` DECIMAL(5,2) DEFAULT NULL,
-  `notes` TEXT,
-  `last_updated` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(`person_id`, `job_posting_id`),
-  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`job_posting_id`) REFERENCES `job_posting` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`resume_id`) REFERENCES `resume` (`id`) ON DELETE SET NULL,
-  FOREIGN KEY (`status_id`) REFERENCES `status` (`id`) ON DELETE SET NULL
+-- Create application table
+CREATE TABLE application (
+    application_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id INTEGER NOT NULL,
+    job_posting_id INTEGER NOT NULL,
+    cover_letter TEXT,
+    status_id INTEGER DEFAULT 1,
+    applied_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_by INTEGER,
+    interview_date TIMESTAMP,
+    interview_notes TEXT,
+    feedback TEXT,
+    match_score DECIMAL(5,2), -- Calculated compatibility score (0-100)
+    salary_expectation DECIMAL(12,2),
+    additional_documents TEXT, -- JSON array of document URLs
+    recruiter_notes TEXT,
+    rejection_reason TEXT,
+    FOREIGN KEY (person_id) REFERENCES person(person_id),
+    FOREIGN KEY (job_posting_id) REFERENCES job_posting(job_posting_id),
+    FOREIGN KEY (status_id) REFERENCES application_status(status_id),
+    FOREIGN KEY (updated_by) REFERENCES person(person_id),
+    UNIQUE(person_id, job_posting_id)
 );
 
--- Competence profiles for applications
-DROP TABLE IF EXISTS `competence_profile`;
-CREATE TABLE `competence_profile` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `application_id` INTEGER DEFAULT NULL,
-  `person_id` INTEGER DEFAULT NULL,
-  `competence_id` INTEGER NOT NULL,
-  `years_of_experience` DECIMAL(4,2) DEFAULT NULL,
-  `proficiency_level` VARCHAR(20) DEFAULT 'intermediate',
-  `verified` BOOLEAN DEFAULT 0,
-  FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`competence_id`) REFERENCES `competence` (`id`) ON DELETE CASCADE
+-- Create competence profile table
+CREATE TABLE competence_profile (
+    profile_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id INTEGER NOT NULL,
+    competence_id INTEGER NOT NULL,
+    years_of_experience DECIMAL(3,1) NOT NULL,
+    proficiency_level VARCHAR(20) NOT NULL, -- beginner, intermediate, advanced, expert
+    certification VARCHAR(200),
+    last_used_date DATE,
+    is_verified BOOLEAN DEFAULT FALSE,
+    verified_by INTEGER,
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (person_id) REFERENCES person(person_id) ON DELETE CASCADE,
+    FOREIGN KEY (competence_id) REFERENCES competence(competence_id),
+    FOREIGN KEY (verified_by) REFERENCES person(person_id),
+    UNIQUE(person_id, competence_id)
 );
 
--- Interview types
-DROP TABLE IF EXISTS `interview_type`;
-CREATE TABLE `interview_type` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `name` VARCHAR(100) NOT NULL,
-  `description` TEXT,
-  `duration_minutes` INTEGER DEFAULT 60
+-- Create notifications table
+CREATE TABLE notifications (
+    notification_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recipient_id INTEGER NOT NULL,
+    sender_id INTEGER,
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    type VARCHAR(50) DEFAULT 'info', -- info, warning, success, error
+    related_entity_type VARCHAR(50), -- application, job_posting, interview
+    related_entity_id INTEGER,
+    is_read BOOLEAN DEFAULT FALSE,
+    read_at TIMESTAMP,
+    expires_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recipient_id) REFERENCES person(person_id),
+    FOREIGN KEY (sender_id) REFERENCES person(person_id)
 );
 
-INSERT INTO `interview_type` (`name`, `description`, `duration_minutes`) VALUES
-('Phone Screen', 'Initial phone conversation', 30),
-('Technical Interview', 'Technical skills assessment', 90),
-('Behavioral Interview', 'Cultural fit and soft skills', 60),
-('Final Interview', 'Interview with hiring manager', 60),
-('Panel Interview', 'Interview with multiple team members', 90);
-
--- Interview scheduling
-DROP TABLE IF EXISTS `interview`;
-CREATE TABLE `interview` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `application_id` INTEGER NOT NULL,
-  `interview_type_id` INTEGER NOT NULL,
-  `interviewer_id` INTEGER NOT NULL,
-  `scheduled_date` DATETIME NOT NULL,
-  `duration_minutes` INTEGER DEFAULT 60,
-  `location` VARCHAR(255),
-  `meeting_link` VARCHAR(500),
-  `status` VARCHAR(20) DEFAULT 'scheduled',
-  `feedback` TEXT,
-  `rating` INTEGER CHECK (rating >= 1 AND rating <= 5),
-  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`interview_type_id`) REFERENCES `interview_type` (`id`),
-  FOREIGN KEY (`interviewer_id`) REFERENCES `person` (`id`)
+-- Create system configuration table
+CREATE TABLE system_config (
+    config_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    config_key VARCHAR(100) NOT NULL UNIQUE,
+    config_value TEXT,
+    description TEXT,
+    data_type VARCHAR(20) DEFAULT 'string', -- string, number, boolean, json
+    is_public BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Job offers
-DROP TABLE IF EXISTS `job_offer`;
-CREATE TABLE `job_offer` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `application_id` INTEGER NOT NULL,
-  `salary_offered` DECIMAL(10,2) NOT NULL,
-  `currency` VARCHAR(3) DEFAULT 'USD',
-  `benefits` TEXT,
-  `start_date` DATE,
-  `offer_letter_path` VARCHAR(500),
-  `expiry_date` DATE,
-  `status` VARCHAR(20) DEFAULT 'draft',
-  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (`application_id`) REFERENCES `application` (`id`) ON DELETE CASCADE
+-- Insert default system configurations
+INSERT INTO system_config (config_key, config_value, description, data_type, is_public) VALUES
+('application_deadline_buffer_days', '7', 'Number of days before deadline to send reminder', 'number', FALSE),
+('max_applications_per_user', '10', 'Maximum active applications per user', 'number', FALSE),
+('auto_reject_after_days', '90', 'Auto-reject applications after this many days', 'number', FALSE),
+('company_name', 'Recruitment Corp', 'Company name for branding', 'string', TRUE),
+('support_email', 'support@recruitment.com', 'Support contact email', 'string', TRUE);
+
+-- Create application audit table for tracking changes
+CREATE TABLE application_audit (
+    audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    application_id INTEGER NOT NULL,
+    field_name VARCHAR(100) NOT NULL,
+    old_value TEXT,
+    new_value TEXT,
+    changed_by INTEGER NOT NULL,
+    change_reason TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (application_id) REFERENCES application(application_id),
+    FOREIGN KEY (changed_by) REFERENCES person(person_id)
 );
 
--- Candidate matching scores
-DROP TABLE IF EXISTS `candidate_match`;
-CREATE TABLE `candidate_match` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `job_posting_id` INTEGER NOT NULL,
-  `person_id` INTEGER NOT NULL,
-  `overall_score` DECIMAL(5,2) NOT NULL,
-  `skills_score` DECIMAL(5,2),
-  `experience_score` DECIMAL(5,2),
-  `education_score` DECIMAL(5,2),
-  `location_score` DECIMAL(5,2),
-  `calculated_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(`job_posting_id`, `person_id`),
-  FOREIGN KEY (`job_posting_id`) REFERENCES `job_posting` (`id`) ON DELETE CASCADE,
-  FOREIGN KEY (`person_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
-);
+-- Create indexes for better performance
+CREATE INDEX idx_person_email ON person(email);
+CREATE INDEX idx_person_role ON person(role_id);
+CREATE INDEX idx_credential_username ON credential(username);
+CREATE INDEX idx_application_person ON application(person_id);
+CREATE INDEX idx_application_job ON application(job_posting_id);
+CREATE INDEX idx_application_status ON application(status_id);
+CREATE INDEX idx_job_posting_status ON job_posting(status);
+CREATE INDEX idx_job_posting_category ON job_posting(category_id);
+CREATE INDEX idx_job_posting_posted_by ON job_posting(posted_by);
+CREATE INDEX idx_notifications_recipient ON notifications(recipient_id, is_read);
+CREATE INDEX idx_competence_profile_person ON competence_profile(person_id);
 
--- System notifications
-DROP TABLE IF EXISTS `notification`;
-CREATE TABLE `notification` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `recipient_id` INTEGER NOT NULL,
-  `title` VARCHAR(255) NOT NULL,
-  `message` TEXT NOT NULL,
-  `type` VARCHAR(20) DEFAULT 'info',
-  `read_status` BOOLEAN DEFAULT 0,
-  `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-  `read_at` DATETIME DEFAULT NULL,
-  FOREIGN KEY (`recipient_id`) REFERENCES `person` (`id`) ON DELETE CASCADE
-);
+-- Create views for common queries
+CREATE VIEW active_job_postings AS
+SELECT 
+    jp.*,
+    jc.name as category_name,
+    p.firstname || ' ' || p.lastname as posted_by_name
+FROM job_posting jp
+LEFT JOIN job_category jc ON jp.category_id = jc.category_id
+LEFT JOIN person p ON jp.posted_by = p.person_id
+WHERE jp.status = 'active' 
+AND (jp.application_deadline IS NULL OR jp.application_deadline >= DATE('now'));
 
--- System configuration
-DROP TABLE IF EXISTS `system_config`;
-CREATE TABLE `system_config` (
-  `id` INTEGER PRIMARY KEY AUTOINCREMENT,
-  `config_key` VARCHAR(100) NOT NULL UNIQUE,
-  `config_value` TEXT,
-  `description` VARCHAR(255),
-  `updated_at` DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+CREATE VIEW application_summary AS
+SELECT 
+    a.*,
+    p.firstname || ' ' || p.lastname as applicant_name,
+    p.email as applicant_email,
+    jp.title as job_title,
+    ast.name as status_name,
+    ast.description as status_description
+FROM application a
+JOIN person p ON a.person_id = p.person_id
+JOIN job_posting jp ON a.job_posting_id = jp.job_posting_id
+JOIN application_status ast ON a.status_id = ast.status_id;
 
-INSERT INTO `system_config` (`config_key`, `config_value`, `description`) VALUES
-('max_file_upload_size', '10485760', 'Maximum file upload size in bytes (10MB)'),
-('allowed_resume_formats', 'pdf,doc,docx', 'Allowed resume file formats'),
-('default_application_expiry_days', '30', 'Default days before application expires'),
-('email_notifications_enabled', 'true', 'Enable email notifications'),
-('auto_matching_enabled', 'true', 'Enable automatic candidate matching');
+-- Add triggers for timestamp updates
+CREATE TRIGGER update_person_timestamp 
+    AFTER UPDATE ON person
+    BEGIN
+        UPDATE person SET updated_at = CURRENT_TIMESTAMP WHERE person_id = NEW.person_id;
+    END;
+
+CREATE TRIGGER update_credential_timestamp 
+    AFTER UPDATE ON credential
+    BEGIN
+        UPDATE credential SET updated_at = CURRENT_TIMESTAMP WHERE credential_id = NEW.credential_id;
+    END;
+
+CREATE TRIGGER update_job_posting_timestamp 
+    AFTER UPDATE ON job_posting
+    BEGIN
+        UPDATE job_posting SET updated_at = CURRENT_TIMESTAMP WHERE job_posting_id = NEW.job_posting_id;
+    END;
+
+CREATE TRIGGER update_application_timestamp 
+    AFTER UPDATE ON application
+    BEGIN
+        UPDATE application SET last_updated = CURRENT_TIMESTAMP WHERE application_id = NEW.application_id;
+    END;

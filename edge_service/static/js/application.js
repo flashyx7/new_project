@@ -1,156 +1,156 @@
-// Application JavaScript for Recruitment System
 
-// Global variables
-let currentUser = null;
+// Recruitment System JavaScript Utilities
 
-// Initialize application
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Application initialized');
-
-    // Initialize dark mode
-    initializeDarkMode();
-
-    // Initialize forms
-    initializeForms();
-
-    // Load user data if logged in
-    loadCurrentUser();
-});
-
-// Dark mode functionality
-function initializeDarkMode() {
-    const darkModeToggle = document.getElementById('darkModeToggle');
-    if (darkModeToggle) {
-        // Check saved preference
-        const isDarkMode = localStorage.getItem('darkMode') === 'true';
-        if (isDarkMode) {
-            document.body.classList.add('dark-mode');
-            darkModeToggle.checked = true;
+// Global state
+window.RecruitmentApp = {
+    user: null,
+    token: null,
+    
+    init: function() {
+        this.loadUserFromStorage();
+        this.setupEventListeners();
+    },
+    
+    loadUserFromStorage: function() {
+        const token = localStorage.getItem('access_token');
+        const user = localStorage.getItem('user');
+        
+        if (token && user) {
+            this.token = token;
+            this.user = JSON.parse(user);
+            this.updateNavigation();
         }
-
-        darkModeToggle.addEventListener('change', function() {
-            if (this.checked) {
-                document.body.classList.add('dark-mode');
-                localStorage.setItem('darkMode', 'true');
-            } else {
-                document.body.classList.remove('dark-mode');
-                localStorage.setItem('darkMode', 'false');
+    },
+    
+    updateNavigation: function() {
+        // Update navigation based on user state
+        if (this.user) {
+            const navbarNav = document.querySelector('.navbar-nav');
+            if (navbarNav) {
+                navbarNav.innerHTML = `
+                    <a class="nav-link" href="/">Home</a>
+                    <a class="nav-link" href="/jobs">Jobs</a>
+                    <a class="nav-link" href="/dashboard">Dashboard</a>
+                    <a class="nav-link" href="#" onclick="RecruitmentApp.logout()">Logout (${this.user.firstname})</a>
+                `;
             }
+        }
+    },
+    
+    setupEventListeners: function() {
+        // Setup global event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            this.updateNavigation();
         });
-    }
-}
-
-// Initialize forms
-function initializeForms() {
-    // Login form
-    const loginForm = document.getElementById('loginForm');
-    if (loginForm) {
-        loginForm.addEventListener('submit', handleLogin);
-    }
-
-    // Registration form
-    const registerForm = document.getElementById('registerForm');
-    if (registerForm) {
-        registerForm.addEventListener('submit', handleRegistration);
-    }
-}
-
-// Handle login
-async function handleLogin(event) {
-    event.preventDefault();
-
-    const formData = new FormData(event.target);
-    const loginData = {
-        username: formData.get('username'),
-        password: formData.get('password')
-    };
-
-    try {
-        const response = await fetch('/login', {
-            method: 'POST',
+    },
+    
+    logout: function() {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user');
+        this.token = null;
+        this.user = null;
+        window.location.href = '/';
+    },
+    
+    makeAuthenticatedRequest: async function(url, options = {}) {
+        const defaultOptions = {
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams(loginData)
-        });
-
-        if (response.ok) {
-            window.location.href = '/dashboard';
-        } else {
-            showMessage('error', 'Login failed. Please check your credentials.');
+                'Content-Type': 'application/json',
+                ...options.headers
+            }
+        };
+        
+        if (this.token) {
+            defaultOptions.headers['Authorization'] = `Bearer ${this.token}`;
         }
-    } catch (error) {
-        console.error('Login error:', error);
-        showMessage('error', 'Login failed. Please try again.');
-    }
-}
-
-// Handle registration
-async function handleRegistration(event) {
-    event.preventDefault();
-
-    const formData = new FormData(event.target);
-    const registerData = {
-        firstname: formData.get('firstname'),
-        lastname: formData.get('lastname'),
-        email: formData.get('email'),
-        username: formData.get('username'),
-        password: formData.get('password')
-    };
-
-    try {
-        const response = await fetch('/register', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-            body: new URLSearchParams(registerData)
-        });
-
-        if (response.ok) {
-            window.location.href = '/login?message=Registration successful';
-        } else {
-            showMessage('error', 'Registration failed. Please try again.');
+        
+        const response = await fetch(url, { ...defaultOptions, ...options });
+        
+        if (response.status === 401) {
+            // Token expired or invalid
+            this.logout();
+            throw new Error('Authentication required');
         }
-    } catch (error) {
-        console.error('Registration error:', error);
-        showMessage('error', 'Registration failed. Please try again.');
-    }
-}
-
-// Load current user
-async function loadCurrentUser() {
-    try {
-        const response = await fetch('/api/user/current');
-        if (response.ok) {
-            currentUser = await response.json();
-        }
-    } catch (error) {
-        console.log('No user session found');
-    }
-}
-
-// Show message
-function showMessage(type, message) {
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type === 'error' ? 'danger' : 'success'} alert-dismissible fade show`;
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-
-    const container = document.querySelector('.container');
-    if (container) {
-        container.insertBefore(alertDiv, container.firstChild);
-
+        
+        return response;
+    },
+    
+    showAlert: function(message, type = 'info', containerId = 'alertContainer') {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        container.appendChild(alertDiv);
+        
         // Auto-dismiss after 5 seconds
         setTimeout(() => {
-            alertDiv.remove();
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
         }, 5000);
+    },
+    
+    formatDate: function(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        });
+    },
+    
+    formatCurrency: function(amount, currency = 'USD') {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: currency
+        }).format(amount);
+    }
+};
+
+// Initialize the app
+RecruitmentApp.init();
+
+// Utility functions
+function showLoading(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.classList.add('loading');
     }
 }
 
-// Export functions for global access
-window.showMessage = showMessage;
-window.handleLogin = handleLogin;
-window.handleRegistration = handleRegistration;
+function hideLoading(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.classList.remove('loading');
+    }
+}
+
+function validateForm(formId) {
+    const form = document.getElementById(formId);
+    if (!form) return false;
+    
+    const inputs = form.querySelectorAll('input[required], select[required], textarea[required]');
+    let isValid = true;
+    
+    inputs.forEach(input => {
+        if (!input.value.trim()) {
+            input.classList.add('is-invalid');
+            isValid = false;
+        } else {
+            input.classList.remove('is-invalid');
+        }
+    });
+    
+    return isValid;
+}
+
+// Export for use in other scripts
+window.showLoading = showLoading;
+window.hideLoading = hideLoading;
+window.validateForm = validateForm;
