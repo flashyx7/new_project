@@ -944,7 +944,7 @@ async def update_profile(
 
         cursor.execute("""
             UPDATE person 
-            SET firstname = ?, lastname = ?, email = ?, date_of_birth = ?, phone = ?, address = ?
+            SET firstname = ?, lastname = ?, email = ?, date_ofbirth = ?, phone = ?, address = ?
             WHERE id = ?
         """, (firstname, lastname, email, date_of_birth, phone, address, user["person_id"]))
 

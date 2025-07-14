@@ -1,6 +1,4 @@
-). The edited code snippet provides a corrected version of the file. I will replace the original content with the corrected version from the edited snippet.
 
-```python
 #!/usr/bin/env python3
 """
 Initialize the recruitment system database with schema and test data.

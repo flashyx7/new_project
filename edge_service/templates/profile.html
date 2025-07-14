@@ -1,4 +1,3 @@
-
 {% extends "base.html" %}
 
 {% block title %}My Profile - Recruitment System{% endblock %}
@@ -13,10 +12,12 @@
 
 <div class="row">
     <div class="col-md-8">
-        {% if error %}
-            <div class="alert alert-danger">{{ error }}</div>
-        {% endif %}
-        
+        {% if request.query_params.get('success') %}
+                <div class="alert alert-success">
+                    {{ request.query_params.get('success') }}
+                </div>
+            {% endif %}
+
         <div class="card">
             <div class="card-body">
                 <form method="POST" action="/applicant/profile">
@@ -36,13 +37,13 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="email" class="form-label">Email</label>
                         <input type="email" class="form-control" id="email" name="email" 
                                value="{{ profile[2] if profile else '' }}">
                     </div>
-                    
+
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
@@ -59,18 +60,18 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="address" class="form-label">Address</label>
                         <textarea class="form-control" id="address" name="address" rows="3">{{ profile[5] if profile else '' }}</textarea>
                     </div>
-                    
+
                     <button type="submit" class="btn btn-primary">Update Profile</button>
                 </form>
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-4">
         <div class="card">
             <div class="card-header">
