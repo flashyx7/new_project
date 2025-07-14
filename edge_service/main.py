@@ -1,4 +1,3 @@
-
 """
 Edge Service - Main entry point for the Recruitment System
 Handles routing, authentication, and serves the web interface
@@ -30,17 +29,17 @@ except ImportError as e:
     import bcrypt
     import jwt
     from datetime import datetime, timedelta
-    
+
     def get_password_hash(password: str) -> str:
         salt = bcrypt.gensalt()
         return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
-    
+
     def verify_password(plain_password: str, hashed_password: str) -> bool:
         try:
             return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
         except:
             return False
-    
+
     def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
         to_encode = data.copy()
         if expires_delta:
@@ -49,7 +48,7 @@ except ImportError as e:
             expire = datetime.utcnow() + timedelta(hours=24)
         to_encode.update({"exp": expire})
         return jwt.encode(to_encode, "secret-key", algorithm="HS256")
-    
+
     def verify_token(token: str) -> dict:
         try:
             return jwt.decode(token, "secret-key", algorithms=["HS256"])
@@ -111,7 +110,8 @@ def authenticate_user(username: str, password: str):
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT c.id, c.person_id, c.username, c.password, p.firstname, p.lastname, p.email, p.role_id
+            SELECT c.id, c.person_id, c.username, c.password, 
+                   p.firstname, p.lastname, p.email, p.role_id
             FROM credential c
             JOIN person p ON c.person_id = p.id
             WHERE c.username = ?
@@ -500,7 +500,7 @@ async def api_get_user_profile(request: Request):
             status_code=401,
             content={"error": "Not authenticated"}
         )
-    
+
     return JSONResponse(
         status_code=200,
         content={"user": user}
@@ -522,7 +522,7 @@ async def apply_to_job(request: Request, job_id: int, cover_letter: str = Form(.
             "SELECT id FROM application WHERE person_id = ? AND job_posting_id = ?",
             (user["person_id"], job_id)
         )
-        
+
         if cursor.fetchone():
             conn.close()
             return JSONResponse(
@@ -595,9 +595,9 @@ async def route_to_service(service_name: str, path: str, method: str = "GET", **
             status_code=404,
             content={"error": f"Service {service_name} not found"}
         )
-    
+
     url = f"{SERVICE_URLS[service_name]}{path}"
-    
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             if method == "GET":
@@ -613,7 +613,7 @@ async def route_to_service(service_name: str, path: str, method: str = "GET", **
                     status_code=405,
                     content={"error": "Method not allowed"}
                 )
-            
+
             return JSONResponse(
                 status_code=response.status_code,
                 content=response.json() if response.headers.get("content-type", "").startswith("application/json") else {"message": response.text}

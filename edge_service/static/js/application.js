@@ -23,13 +23,20 @@ function setupEventListeners() {
         form.addEventListener('submit', handleJobApplication);
     });
 
-    // Login form validation
+    // Login form submission
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
         loginForm.addEventListener('submit', async function(e) {
             e.preventDefault();
 
-            const formData = new FormData(loginForm);
+            const formData = new FormData(this);
+            const username = formData.get('username');
+            const password = formData.get('password');
+
+            if (!username || !password) {
+                showError('Please enter both username and password');
+                return;
+            }
 
             try {
                 const response = await fetch('/api/auth/login', {
@@ -37,28 +44,80 @@ function setupEventListeners() {
                     body: formData
                 });
 
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.token) {
-                        localStorage.setItem('token', data.token);
-                    }
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Login failed: ${response.status} - ${errorText}`);
+                }
+
+                const result = await response.json();
+
+                if (result && result.access_token) {
+                    localStorage.setItem('access_token', result.access_token);
+                    localStorage.setItem('user_id', result.user_id || '');
+                    localStorage.setItem('username', result.username || '');
                     window.location.href = '/dashboard';
                 } else {
-                    const error = await response.json();
-                    showError(error.error || 'Login failed');
+                    showError('Invalid response from server');
                 }
             } catch (error) {
                 console.error('Login error:', error);
-                // Fallback to regular form submission
-                loginForm.submit();
+                showError('Login failed: ' + error.message);
             }
         });
     }
 
-    // Registration form validation
+    // Registration form submission
     const registerForm = document.getElementById('registerForm');
     if (registerForm) {
-        registerForm.addEventListener('submit', validateRegisterForm);
+        registerForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData);
+
+            // Validate required fields
+            const requiredFields = ['firstname', 'lastname', 'email', 'username', 'password'];
+            for (const field of requiredFields) {
+                if (!data[field] || data[field].trim() === '') {
+                    showError(`Please fill in the ${field} field`);
+                    return;
+                }
+            }
+
+            // Set default role if not provided
+            if (!data.role_id) {
+                data.role_id = 2; // Default to applicant
+            }
+
+            try {
+                const response = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`Registration failed: ${response.status} - ${errorText}`);
+                }
+
+                const result = await response.json();
+
+                if (result && result.message) {
+                    showSuccess('Registration successful! Please login.');
+                    setTimeout(() => {
+                        window.location.href = '/login';
+                    }, 2000);
+                } else {
+                    showError('Registration completed but received unexpected response');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showError('Registration failed: ' + error.message);
+            }
+        });
     }
 
     // Search functionality
@@ -398,3 +457,11 @@ window.RecruitmentApp = {
     apiCall,
     handleJobApplication
 };
+
+function showError(message) {
+    showMessage(message, 'error');
+}
+
+function showSuccess(message) {
+    showMessage(message, 'success');
+}

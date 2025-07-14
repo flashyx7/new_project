@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 """
 Initialize the recruitment system database with comprehensive schema and sample data.
@@ -46,7 +45,7 @@ logger = structlog.get_logger()
 def init_database():
     """Initialize SQLite database with comprehensive schema and sample data."""
     db_path = "recruitment_system.db"
-    
+
     try:
         # Remove existing database to start fresh
         if os.path.exists(db_path):
@@ -55,26 +54,33 @@ def init_database():
                 logger.info("Removed existing database file")
             except PermissionError:
                 logger.warning("Could not remove existing database file, proceeding anyway")
-        
+
         # Connect to database
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        
+
         logger.info("Initializing database", path=db_path)
-        
+
         # Read and execute enhanced schema
         schema_path = os.path.join(project_root, "database", "enhanced_schema.sql")
         if os.path.exists(schema_path):
             with open(schema_path, 'r') as f:
                 schema_sql = f.read()
-                
+
+            # Create tables with column names matching the code expectations
+            schema_sql = schema_sql.replace("role_id INTEGER PRIMARY KEY AUTOINCREMENT", "id INTEGER PRIMARY KEY AUTOINCREMENT")
+            schema_sql = schema_sql.replace("person_id INTEGER PRIMARY KEY AUTOINCREMENT", "id INTEGER PRIMARY KEY AUTOINCREMENT")
+            schema_sql = schema_sql.replace("credential_id INTEGER PRIMARY KEY AUTOINCREMENT", "id INTEGER PRIMARY KEY AUTOINCREMENT")
+            schema_sql = schema_sql.replace("FOREIGN KEY (role_id) REFERENCES role(role_id)", "FOREIGN KEY (role_id) REFERENCES role(id)")
+            schema_sql = schema_sql.replace("FOREIGN KEY (person_id) REFERENCES person(person_id)", "FOREIGN KEY (person_id) REFERENCES person(id)")
+
             # Execute the entire schema at once for SQLite
             cursor.executescript(schema_sql)
             logger.info("Schema executed successfully")
         else:
             logger.error("Schema file not found", path=schema_path)
             return False
-        
+
         # Create sample users
         sample_users = [
             {
@@ -114,7 +120,7 @@ def init_database():
                 'date_of_birth': '1978-11-10'
             }
         ]
-        
+
         for user in sample_users:
             # Insert person
             cursor.execute("""
@@ -125,16 +131,16 @@ def init_database():
                 user['date_of_birth'], user['role_id'],
                 '+1-555-0123', '123 Main St, City, State 12345'
             ))
-            
+
             person_id = cursor.lastrowid
-            
+
             # Insert credentials
             hashed_password = get_password_hash(user['password'])
             cursor.execute("""
                 INSERT INTO credential (person_id, username, password)
                 VALUES (?, ?, ?)
             """, (person_id, user['username'], hashed_password))
-            
+
         # Create sample job postings
         sample_jobs = [
             {
@@ -170,7 +176,7 @@ def init_database():
                 'application_deadline': (datetime.now() + timedelta(days=45)).strftime('%Y-%m-%d')
             }
         ]
-        
+
         for job in sample_jobs:
             cursor.execute("""
                 INSERT INTO job_posting 
@@ -184,7 +190,7 @@ def init_database():
                 job['remote_allowed'], job['employment_type'], job['experience_level'],
                 job['category_id'], job['posted_by'], job['status'], job['application_deadline']
             ))
-        
+
         # Create sample application
         cursor.execute("""
             INSERT INTO availability (person_id, from_date, to_date, is_flexible)
@@ -195,7 +201,7 @@ def init_database():
             (datetime.now() + timedelta(days=365)).strftime('%Y-%m-%d'),
             1
         ))
-        
+
         cursor.execute("""
             INSERT INTO application 
             (person_id, job_posting_id, cover_letter, status_id, match_score)
@@ -205,24 +211,24 @@ def init_database():
             "I am very interested in this position and believe my skills align well with your requirements.",
             1, 85.5
         ))
-        
+
         # Add competence profiles
         competence_data = [
             (3, 1, 5.0, 'advanced'),  # John - Python
             (3, 2, 3.0, 'intermediate'),  # John - JavaScript
             (3, 5, 4.0, 'advanced'),  # John - SQL
         ]
-        
+
         for person_id, competence_id, years, level in competence_data:
             cursor.execute("""
                 INSERT INTO competence_profile 
                 (person_id, competence_id, years_of_experience, proficiency_level)
                 VALUES (?, ?, ?, ?)
             """, (person_id, competence_id, years, level))
-        
+
         conn.commit()
         logger.info("Database initialized successfully with sample data")
-        
+
         # Print sample credentials
         print("\n" + "="*50)
         print("DATABASE INITIALIZED SUCCESSFULLY")
@@ -235,9 +241,9 @@ def init_database():
             print(f"Password: {user['password']}")
             print(f"Email: {user['email']}")
             print("-" * 30)
-        
+
         return True
-        
+
     except Exception as e:
         logger.error("Database initialization failed", error=str(e))
         import traceback
