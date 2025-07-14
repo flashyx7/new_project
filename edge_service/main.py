@@ -313,21 +313,24 @@ async def dashboard(request: Request):
                 SELECT jp.title, a.applied_date, ast.name as status
                 FROM application a
                 JOIN job_posting jp ON a.job_posting_id = jp.id
-                JOIN application_status ast ON a.status_id = ast.id
+                LEFT JOIN application_status ast ON a.status_id = ast.id
                 WHERE a.person_id = ?
                 ORDER BY a.applied_date DESC
                 LIMIT 5
             """, (user["person_id"],))
             dashboard_data["recent_applications"] = cursor.fetchall()
 
-            # Recommended jobs (job matches)
+            # Recommended jobs (job matches) - exclude jobs already applied to
             cursor.execute("""
-                SELECT id, title, description, location, employment_type, salary_min, salary_max
-                FROM job_posting 
-                WHERE status = 'active'
-                ORDER BY created_at DESC
+                SELECT jp.id, jp.title, jp.description, jp.location, jp.employment_type, jp.salary_min, jp.salary_max
+                FROM job_posting jp
+                WHERE jp.status = 'active' 
+                AND jp.id NOT IN (
+                    SELECT job_posting_id FROM application WHERE person_id = ?
+                )
+                ORDER BY jp.created_at DESC
                 LIMIT 5
-            """)
+            """, (user["person_id"],))
             dashboard_data["recommended_jobs"] = cursor.fetchall()
             dashboard_data["job_matches"] = len(dashboard_data["recommended_jobs"])
 
@@ -578,7 +581,12 @@ async def api_get_user_profile(request: Request):
     )
 
 @app.post("/jobs/{job_id}/apply")
-async def apply_to_job(request: Request, job_id: int, cover_letter: str = Form(...)):
+async def apply_to_job(
+    request: Request, 
+    job_id: int, 
+    cover_letter: str = Form(...),
+    resume: UploadFile = File(None)
+):
     """Apply to a job."""
     user = get_current_user(request)
     if not user:
@@ -601,18 +609,28 @@ async def apply_to_job(request: Request, job_id: int, cover_letter: str = Form(.
                 content={"detail": "You have already applied to this job"}
             )
 
+        resume_path = None
+        if resume and resume.filename:
+            # Save resume file
+            import os
+            os.makedirs("uploads/resumes", exist_ok=True)
+            resume_path = f"uploads/resumes/{user['person_id']}_{job_id}_{resume.filename}"
+            with open(resume_path, "wb") as buffer:
+                content = await resume.read()
+                buffer.write(content)
+
         # Create application
         cursor.execute("""
-            INSERT INTO application (person_id, job_posting_id, cover_letter, status_id)
-            VALUES (?, ?, ?, ?)
-        """, (user["person_id"], job_id, cover_letter, 1))  # 1 = submitted status
+            INSERT INTO application (person_id, job_posting_id, cover_letter, resume_path, status_id)
+            VALUES (?, ?, ?, ?, ?)
+        """, (user["person_id"], job_id, cover_letter, resume_path, 1))  # 1 = submitted status
 
         conn.commit()
         conn.close()
 
         return JSONResponse(
             status_code=200,
-            content={"message": "Application submitted successfully"}
+            content={"message": "Application submitted successfully", "applied": True}
         )
 
     except Exception as e:

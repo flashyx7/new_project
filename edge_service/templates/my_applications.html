@@ -72,8 +72,11 @@ async function deleteApplication(applicationId) {
     }
 
     try {
-        const response = await fetch(`/applicant/delete-application/${applicationId}`, {
-            method: 'POST'
+        const response = await fetch(`/applicant/applications/${applicationId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
         });
 
         const result = await response.json();
