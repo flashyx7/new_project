@@ -65,17 +65,23 @@ def main():
         print("   Username: admin, Password: admin123 (Admin)")
         print("   Username: jcandidate, Password: candidate123 (Applicant)")
         print("   Username: jrecruiter, Password: recruiter123 (Recruiter)")
+        print("\n🧪 Run comprehensive test with: python test_system_comprehensive.py")
         print("\n" + "=" * 50)
         print("🚀 Starting server...")
 
         # Start the edge service
-        subprocess.run([sys.executable, "edge_service/main.py"])
+        result = subprocess.run([sys.executable, "edge_service/main.py"], 
+                               capture_output=False, text=True)
+        
+        if result.returncode != 0:
+            print(f"❌ Edge service failed with return code: {result.returncode}")
+            return 1
 
     except KeyboardInterrupt:
-        print("\n\nShutting down...")
+        print("\n\n✋ Shutting down gracefully...")
     except Exception as e:
-        print(f"Error starting edge service: {e}")
-        print("Traceback:")
+        print(f"❌ Error starting edge service: {e}")
+        print("🔍 Traceback:")
         import traceback
         traceback.print_exc()
         return 1

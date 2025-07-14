@@ -58,11 +58,21 @@ def init_database():
 
             # Add test job postings
             cursor.execute("""
-                INSERT INTO job_posting (title, description, posted_by, location, employment_type, status)
+                INSERT INTO job_posting (title, description, posted_by, location, employment_type, status, salary_min, salary_max, experience_level)
                 VALUES 
-                ('Software Engineer', 'We are looking for a skilled software engineer...', 3, 'Remote', 'full-time', 'active'),
-                ('Frontend Developer', 'Join our team as a frontend developer...', 3, 'New York', 'full-time', 'active'),
-                ('Data Analyst', 'Analyze data and provide insights...', 3, 'San Francisco', 'contract', 'active')
+                ('Software Engineer', 'We are looking for a skilled software engineer to join our dynamic team. You will work on cutting-edge projects and collaborate with talented developers.', 3, 'Remote', 'full-time', 'active', 60000, 90000, 'mid-level'),
+                ('Frontend Developer', 'Join our team as a frontend developer. You will be responsible for creating amazing user interfaces using modern technologies like React and Vue.js.', 3, 'New York', 'full-time', 'active', 50000, 75000, 'junior'),
+                ('Data Analyst', 'Analyze data and provide insights to drive business decisions. Experience with SQL, Python, and data visualization tools required.', 3, 'San Francisco', 'contract', 'active', 55000, 80000, 'mid-level'),
+                ('Senior Backend Developer', 'Lead backend development initiatives using Python, FastAPI, and microservices architecture.', 3, 'Seattle', 'full-time', 'active', 80000, 120000, 'senior'),
+                ('UI/UX Designer', 'Design beautiful and intuitive user interfaces. Proficiency in Figma, Adobe Creative Suite required.', 3, 'Los Angeles', 'part-time', 'active', 40000, 65000, 'mid-level')
+            """)
+
+            # Add test applications
+            cursor.execute("""
+                INSERT INTO application (person_id, job_posting_id, cover_letter, status_id)
+                VALUES 
+                (2, 1, 'I am very interested in this software engineer position. I have 3 years of experience in Python and web development.', 1),
+                (2, 2, 'I would love to work as a frontend developer. I have experience with React and modern JavaScript frameworks.', 2)
             """)
 
             conn.commit()

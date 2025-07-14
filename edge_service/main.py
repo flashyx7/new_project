@@ -358,13 +358,14 @@ async def dashboard(request: Request):
         conn.close()
 
         # Choose template based on role
-        template_name = "dashboard.html"
         if user["role_id"] == 1:  # Admin
             template_name = "admin_dashboard.html"
         elif user["role_id"] == 3:  # Recruiter
             template_name = "recruiter_dashboard.html"
-        else:  # Applicant (role_id == 2)
+        elif user["role_id"] == 2:  # Applicant
             template_name = "dashboard.html"
+        else:
+            template_name = "dashboard.html"  # Default fallback
 
         return templates.TemplateResponse(template_name, {
             "request": request,
@@ -822,12 +823,12 @@ async def my_applications(request: Request):
             "error": "Failed to load applications"
         })
 
-@app.post("/applicant/delete-application/{application_id}")
+@app.delete("/applicant/applications/{application_id}")
 async def delete_application(request: Request, application_id: int):
     """Delete an application."""
     user = get_current_user(request)
     if not user or user["role_id"] != 2:
-        return RedirectResponse(url="/login", status_code=302)
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     try:
         conn = get_db_connection()
@@ -850,13 +851,20 @@ async def delete_application(request: Request, application_id: int):
         cursor.execute("DELETE FROM application WHERE id = ? AND person_id = ?", 
                       (application_id, user["person_id"]))
 
+        rows_affected = cursor.rowcount
         conn.commit()
         conn.close()
 
-        return JSONResponse(
-            status_code=200,
-            content={"message": "Application deleted successfully"}
-        )
+        if rows_affected > 0:
+            return JSONResponse(
+                status_code=200,
+                content={"message": "Application deleted successfully"}
+            )
+        else:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "Application not found or already deleted"}
+            )
 
     except Exception as e:
         logger.error("Application deletion failed", error=str(e))
@@ -928,12 +936,42 @@ async def update_profile(
             "error": "Failed to update profile. Please try again."
         })
 
-    except Exception as e:
-        logger.error("Failed to load profile", error=str(e))
-        return templates.TemplateResponse("profile.html", {
+@app.get("/applicant/job-matches", response_class=HTMLResponse)
+async def job_matches(request: Request):
+    """Job matches page for applicants."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 2:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT id, title, description, location, employment_type, 
+                   salary_min, salary_max, experience_level, created_at
+            FROM job_posting 
+            WHERE status = 'active'
+            ORDER BY created_at DESC
+            LIMIT 20
+        """)
+
+        jobs = cursor.fetchall()
+        conn.close()
+
+        return templates.TemplateResponse("jobs.html", {
             "request": request,
             "user": user,
-            "error": "Failed to load profile"
+            "jobs": jobs,
+            "page_title": "Job Matches"
+        })
+
+    except Exception as e:
+        logger.error("Failed to load job matches", error=str(e))
+        return templates.TemplateResponse("jobs.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to load job matches"
         })
 
 @app.get("/job/{job_id}", response_class=HTMLResponse)
@@ -1023,12 +1061,51 @@ async def manage_users(request: Request):
             "error": "Failed to load users"
         })
 
+@app.get("/admin/users/{user_id}")
+async def get_user_details(request: Request, user_id: int):
+    """Get user details for editing."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT p.id, p.firstname, p.lastname, p.email, p.role_id, r.name as role_name
+            FROM person p
+            JOIN role r ON p.role_id = r.id
+            WHERE p.id = ?
+        """, (user_id,))
+
+        user_data = cursor.fetchone()
+        conn.close()
+
+        if not user_data:
+            return JSONResponse(status_code=404, content={"error": "User not found"})
+
+        return JSONResponse(status_code=200, content={
+            "user": {
+                "id": user_data[0],
+                "firstname": user_data[1],
+                "lastname": user_data[2],
+                "email": user_data[3],
+                "role_id": user_data[4],
+                "role_name": user_data[5]
+            }
+        })
+
+    except Exception as e:
+        logger.error("Get user details failed", error=str(e))
+        return JSONResponse(status_code=500, content={"error": "Failed to get user details"})
+
 @app.post("/admin/users/{user_id}/edit")
 async def edit_user(request: Request, user_id: int):
     """Edit user details."""
     user = get_current_user(request)
     if not user or user["role_id"] != 1:
-        return RedirectResponse(url="/login", status_code=302)
+        return JSONResponse(status_code=401, content={"error": "Unauthorized"})
 
     try:
         form_data = await request.form()
@@ -1036,6 +1113,9 @@ async def edit_user(request: Request, user_id: int):
         lastname = form_data.get("lastname")
         email = form_data.get("email")
         role_id = form_data.get("role_id")
+
+        if not all([firstname, lastname, email, role_id]):
+            return JSONResponse(status_code=400, content={"error": "All fields are required"})
 
         conn = get_db_connection()
         cursor = conn.cursor()
