@@ -1,3 +1,4 @@
+
 """
 Edge Service - Main entry point for the Recruitment System
 Handles routing, authentication, and serves the web interface
@@ -5,16 +6,15 @@ Handles routing, authentication, and serves the web interface
 
 import os
 import sys
-import uvicorn
+import sqlite3
+import structlog
+from datetime import datetime
 from fastapi import FastAPI, Request, Depends, HTTPException, Form, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
-import httpx
-import structlog
-from datetime import datetime
-import sqlite3
+from starlette.middleware.sessions import SessionMiddleware
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -48,6 +48,9 @@ app = FastAPI(
     description="Edge Service for Recruitment Tracking System",
     version="1.0.0"
 )
+
+# Add session middleware first
+app.add_middleware(SessionMiddleware, secret_key="your-secret-key-here-change-in-production")
 
 # CORS configuration
 app.add_middleware(
@@ -318,6 +321,51 @@ async def jobs_page(request: Request):
             "error": "Unable to load jobs"
         })
 
+@app.post("/jobs/{job_id}/apply")
+async def apply_to_job(request: Request, job_id: int, cover_letter: str = Form(...)):
+    """Apply to a job."""
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check if already applied
+        cursor.execute(
+            "SELECT id FROM application WHERE person_id = ? AND job_posting_id = ?",
+            (user["person_id"], job_id)
+        )
+        
+        if cursor.fetchone():
+            conn.close()
+            return JSONResponse(
+                status_code=409,
+                content={"detail": "You have already applied to this job"}
+            )
+
+        # Create application
+        cursor.execute("""
+            INSERT INTO application (person_id, job_posting_id, cover_letter, status_id)
+            VALUES (?, ?, ?, ?)
+        """, (user["person_id"], job_id, cover_letter, 1))  # 1 = submitted status
+
+        conn.commit()
+        conn.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={"message": "Application submitted successfully"}
+        )
+
+    except Exception as e:
+        logger.error("Application submission failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Application submission failed"}
+        )
+
 @app.get("/logout")
 async def logout(request: Request):
     """Logout user."""
@@ -343,10 +391,6 @@ async def health_check():
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
 
-# Session middleware - add before other middleware
-from starlette.middleware.sessions import SessionMiddleware
-app.add_middleware(SessionMiddleware, secret_key="your-secret-key-here-change-in-production")
-
 # Error handler for unhandled exceptions
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
@@ -356,75 +400,19 @@ async def general_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error"}
     )
 
-@app.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_page(request: Request):
-    """Dashboard page."""
-    return templates.TemplateResponse("dashboard.html", {"request": request})
-
-@app.get("/jobs", response_class=HTMLResponse)
-async def jobs_page(request: Request):
-    """Jobs page."""
-    return templates.TemplateResponse("jobs.html", {"request": request})
-
-@app.get("/api/jobs")
-async def get_jobs():
-    """Get all active job postings."""
-    try:
-        jobs = db_manager.execute_query("""
-            SELECT jp.job_posting_id, jp.title, jp.description, jp.requirements,
-                   jp.salary_min, jp.salary_max, jp.currency, jp.location,
-                   jp.remote_allowed, jp.employment_type, jp.experience_level,
-                   jp.application_deadline, jp.created_at,
-                   jc.name as category_name,
-                   p.firstname || ' ' || p.lastname as posted_by_name
-            FROM job_posting jp
-            LEFT JOIN job_category jc ON jp.category_id = jc.category_id
-            LEFT JOIN person p ON jp.posted_by = p.person_id
-            WHERE jp.status = 'active'
-            ORDER BY jp.created_at DESC
-        """)
-
-        return {"jobs": jobs}
-    except Exception as e:
-        logger.error("Failed to fetch jobs", error=str(e))
-        raise HTTPException(status_code=500, detail="Failed to fetch jobs")
-
-@app.post("/api/jobs/{job_id}/apply")
-async def apply_to_job(job_id: int, cover_letter: str = Form(...), request: Request = None):
-    """Apply to a job."""
-    try:
-        # This would normally extract user from JWT token
-        # For now, we'll use a placeholder
-        person_id = 3  # Default to John Candidate for demo
-
-        # Check if already applied
-        existing = db_manager.execute_query(
-            "SELECT application_id FROM application WHERE person_id = ? AND job_posting_id = ?",
-            (person_id, job_id)
-        )
-
-        if existing:
-            raise HTTPException(status_code=409, detail="You have already applied to this job")
-
-        # Create application
-        application_id = db_manager.execute_insert("""
-            INSERT INTO application (person_id, job_posting_id, cover_letter, status_id)
-            VALUES (?, ?, ?, ?)
-        """, (person_id, job_id, cover_letter, 1))  # 1 = submitted status
-
-        return {"message": "Application submitted successfully", "application_id": application_id}
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Application submission failed", error=str(e))
-        raise HTTPException(status_code=500, detail="Application submission failed")
-
 if __name__ == "__main__":
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=8080,
-        reload=True,
-        log_level="info"
-    )
+    import uvicorn
+
+    # Get host and port from environment or use defaults
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8080"))
+
+    print(f"🚀 Starting Edge Service on {host}:{port}")
+    print("📱 Frontend and Backend API available")
+    print("=" * 50)
+
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="info")
+    except Exception as e:
+        print(f"❌ Failed to start edge service: {e}")
+        sys.exit(1)
