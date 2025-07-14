@@ -1,0 +1,110 @@
+
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard - Recruitment System{% endblock %}
+
+{% block content %}
+<div id="alertContainer"></div>
+
+<div class="row">
+    <div class="col-12">
+        <h2>Admin Dashboard</h2>
+        <p class="lead">System overview and management</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-3">
+        <div class="card dashboard-card">
+            <h5>Active Jobs</h5>
+            <h3 class="text-primary">{{ dashboard_data.active_jobs or 0 }}</h3>
+            <small class="text-muted">Currently Active</small>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card dashboard-card">
+            <h5>Total Applications</h5>
+            <h3 class="text-success">{{ dashboard_data.total_applications or 0 }}</h3>
+            <small class="text-muted">All Applications</small>
+        </div>
+    </div>
+    
+    <div class="col-md-3">
+        <div class="card dashboard-card">
+            <h5>Candidates</h5>
+            <h3 class="text-info">{{ dashboard_data.total_candidates or 0 }}</h3>
+            <small class="text-muted">Registered Candidates</small>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card dashboard-card">
+            <h5>Recruiters</h5>
+            <h3 class="text-warning">{{ dashboard_data.total_recruiters or 0 }}</h3>
+            <small class="text-muted">Active Recruiters</small>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5>Recent System Activity</h5>
+            </div>
+            <div class="card-body">
+                {% if dashboard_data.recent_activity %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Applicant</th>
+                                    <th>Job</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for activity in dashboard_data.recent_activity %}
+                                <tr>
+                                    <td>{{ activity[0] }} {{ activity[1] }}</td>
+                                    <td>{{ activity[2] }}</td>
+                                    <td>{{ activity[3] }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">No recent activity</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="/admin/users" class="btn btn-outline-primary">Manage Users</a>
+                    <a href="/admin/jobs" class="btn btn-outline-success">Manage Jobs</a>
+                    <a href="/admin/applications" class="btn btn-outline-info">View Applications</a>
+                    <a href="/admin/reports" class="btn btn-outline-warning">Generate Reports</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Admin-specific dashboard functionality
+    console.log('Admin dashboard loaded');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,100 @@
+
+{% extends "base.html" %}
+
+{% block title %}Recruiter Dashboard - Recruitment System{% endblock %}
+
+{% block content %}
+<div id="alertContainer"></div>
+
+<div class="row">
+    <div class="col-12">
+        <h2>Recruiter Dashboard</h2>
+        <p class="lead">Manage your job postings and applications</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card dashboard-card">
+            <h5>My Job Postings</h5>
+            <h3 class="text-primary">{{ dashboard_data.my_job_postings or 0 }}</h3>
+            <small class="text-muted">Active Postings</small>
+        </div>
+    </div>
+    
+    <div class="col-md-6">
+        <div class="card dashboard-card">
+            <h5>Applications Received</h5>
+            <h3 class="text-success">{{ dashboard_data.applications_received or 0 }}</h3>
+            <small class="text-muted">Total Applications</small>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5>Recent Applications</h5>
+            </div>
+            <div class="card-body">
+                {% if dashboard_data.recent_applications %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Applicant</th>
+                                    <th>Job</th>
+                                    <th>Status</th>
+                                    <th>Date</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for app in dashboard_data.recent_applications %}
+                                <tr>
+                                    <td>{{ app[0] }} {{ app[1] }}</td>
+                                    <td>{{ app[2] }}</td>
+                                    <td><span class="badge bg-info">{{ app[4] }}</span></td>
+                                    <td>{{ app[3] }}</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-outline-primary">Review</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-muted">No recent applications</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="/recruiter/post-job" class="btn btn-primary">Post New Job</a>
+                    <a href="/recruiter/my-jobs" class="btn btn-outline-primary">My Job Postings</a>
+                    <a href="/recruiter/applications" class="btn btn-outline-success">View Applications</a>
+                    <a href="/recruiter/candidates" class="btn btn-outline-info">Browse Candidates</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Recruiter-specific dashboard functionality
+    console.log('Recruiter dashboard loaded');
+});
+</script>
+{% endblock %}

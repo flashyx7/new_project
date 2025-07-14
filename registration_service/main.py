@@ -1,20 +1,24 @@
-from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import IntegrityError
-from typing import Optional
-import structlog
+
+"""
+Registration Service - User registration and profile management
+"""
+
 import os
 import sys
+import sqlite3
+import structlog
+from datetime import datetime
+from fastapi import FastAPI, HTTPException, status, Form
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, EmailStr
+from typing import Optional
 
 # Add project root to path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
 
-from shared.database import get_db, create_tables
-from shared.models import Person, Credential, Role
-from shared.schemas import RegistrationForm, RegistrationResponse, PersonResponse
-from shared.security import get_password_hash
+from shared.database import get_db_connection, create_tables
+from shared.security import get_password_hash, validate_password_strength
 
 # Configure logging
 structlog.configure(
@@ -51,6 +55,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+class RegistrationForm(BaseModel):
+    username: str
+    password: str
+    email: EmailStr
+    firstname: str
+    lastname: str
+    role_id: Optional[int] = 2
+
+class RegistrationResponse(BaseModel):
+    status: str
+    message: str
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize the registration service."""
@@ -68,60 +84,66 @@ async def health_check():
 
 @app.post("/register", response_model=RegistrationResponse)
 async def register_user(
-    user_data: RegistrationForm,
-    db: Session = Depends(get_db)
+    username: str = Form(...),
+    password: str = Form(...),
+    email: str = Form(...),
+    firstname: str = Form(...),
+    lastname: str = Form(...),
+    role_id: int = Form(2)
 ):
     """Register a new user."""
     try:
-        logger.info("Registration attempt", username=user_data.username, email=user_data.email)
+        logger.info("Registration attempt", username=username, email=email)
+
+        # Validate password strength
+        is_strong, message = validate_password_strength(password)
+        if not is_strong:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=message
+            )
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
         # Check if username already exists
-        existing_credential = db.query(Credential).filter(
-            Credential.username == user_data.username
-        ).first()
-
-        if existing_credential:
+        cursor.execute("SELECT id FROM credential WHERE username = ?", (username,))
+        if cursor.fetchone():
+            conn.close()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Username already exists"
             )
 
         # Check if email already exists
-        existing_person = db.query(Person).filter(
-            Person.email == user_data.email
-        ).first()
-
-        if existing_person:
+        cursor.execute("SELECT id FROM person WHERE email = ?", (email,))
+        if cursor.fetchone():
+            conn.close()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered"
             )
 
         # Create person record
-        person = Person(
-            firstname=user_data.firstname,
-            lastname=user_data.lastname,
-            date_of_birth=user_data.date_of_birth,
-            email=user_data.email,
-            role_id=user_data.role_id or 2
-        )
+        cursor.execute("""
+            INSERT INTO person (firstname, lastname, email, role_id)
+            VALUES (?, ?, ?, ?)
+        """, (firstname, lastname, email, role_id))
 
-        db.add(person)
-        db.flush()  # Get the person ID
+        person_id = cursor.lastrowid
 
         # Create credentials
-        hashed_password = get_password_hash(user_data.password)
-        credential = Credential(
-            person_id=person.id,
-            username=user_data.username,
-            password=hashed_password
-        )
+        hashed_password = get_password_hash(password)
+        cursor.execute("""
+            INSERT INTO credential (person_id, username, password)
+            VALUES (?, ?, ?)
+        """, (person_id, username, hashed_password))
 
-        db.add(credential)
-        db.commit()
+        conn.commit()
+        conn.close()
 
         logger.info("User registered successfully", 
-                   person_id=person.id, username=user_data.username)
+                   person_id=person_id, username=username)
 
         return RegistrationResponse(
             status="success",
@@ -129,53 +151,24 @@ async def register_user(
         )
 
     except HTTPException:
-        db.rollback()
         raise
-    except IntegrityError as e:
-        db.rollback()
-        logger.error("Database integrity error", error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Registration failed due to data conflict"
-        )
     except Exception as e:
-        db.rollback()
         logger.error("Registration failed", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Registration failed"
         )
 
-@app.get("/persons/{person_id}", response_model=PersonResponse)
-async def get_person(person_id: int, db: Session = Depends(get_db)):
-    """Get person information by ID."""
-    try:
-        person = db.query(Person).filter(Person.id == person_id).first()
-
-        if not person:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Person not found"
-            )
-
-        return PersonResponse.from_orm(person)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("Failed to get person", person_id=person_id, error=str(e))
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to retrieve person information"
-        )
-
 @app.get("/username/{username}")
-async def check_username(username: str, db: Session = Depends(get_db)):
+async def check_username(username: str):
     """Check if username is available."""
     try:
-        existing = db.query(Credential).filter(
-            Credential.username == username
-        ).first()
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT id FROM credential WHERE username = ?", (username,))
+        existing = cursor.fetchone()
+        conn.close()
 
         return {
             "username": username,

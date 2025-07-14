@@ -265,7 +265,7 @@ async def register(
 
 @app.get("/dashboard", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    """Dashboard page."""
+    """Dashboard page with role-based content."""
     user = get_current_user(request)
     if not user:
         return RedirectResponse(url="/login", status_code=302)
@@ -274,41 +274,99 @@ async def dashboard(request: Request):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Get statistics
-        cursor.execute("SELECT COUNT(*) FROM job_posting WHERE status = 'active'")
-        active_jobs = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(*) FROM application")
-        total_applications = cursor.fetchone()[0]
-
-        cursor.execute("SELECT COUNT(*) FROM person WHERE role_id = 2")
-        total_candidates = cursor.fetchone()[0]
-
-        # Get recent applications for this user
-        recent_applications = []
-        if user["role_id"] == 2:  # Applicant
+        # Get role-specific dashboard data
+        dashboard_data = {}
+        
+        if user["role_id"] == 1:  # Admin
+            cursor.execute("SELECT COUNT(*) FROM job_posting WHERE status = 'active'")
+            dashboard_data["active_jobs"] = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM application")
+            dashboard_data["total_applications"] = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM person WHERE role_id = 2")
+            dashboard_data["total_candidates"] = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM person WHERE role_id = 3")
+            dashboard_data["total_recruiters"] = cursor.fetchone()[0]
+            
+            # Recent system activity
             cursor.execute("""
-                SELECT a.id, jp.title, a.applied_date, s.name as status
+                SELECT p.firstname, p.lastname, jp.title, a.applied_date
+                FROM application a
+                JOIN person p ON a.person_id = p.id
+                JOIN job_posting jp ON a.job_posting_id = jp.id
+                ORDER BY a.applied_date DESC
+                LIMIT 10
+            """)
+            dashboard_data["recent_activity"] = cursor.fetchall()
+            
+        elif user["role_id"] == 2:  # Applicant
+            cursor.execute("SELECT COUNT(*) FROM job_posting WHERE status = 'active'")
+            dashboard_data["active_jobs"] = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT COUNT(*) FROM application WHERE person_id = ?", (user["person_id"],))
+            dashboard_data["my_applications"] = cursor.fetchone()[0]
+            
+            # My recent applications
+            cursor.execute("""
+                SELECT jp.title, a.applied_date, ast.name as status
                 FROM application a
                 JOIN job_posting jp ON a.job_posting_id = jp.id
-                JOIN application_status s ON a.status_id = s.id
+                JOIN application_status ast ON a.status_id = ast.id
                 WHERE a.person_id = ?
                 ORDER BY a.applied_date DESC
                 LIMIT 5
             """, (user["person_id"],))
-            recent_applications = cursor.fetchall()
+            dashboard_data["recent_applications"] = cursor.fetchall()
+            
+            # Recommended jobs
+            cursor.execute("""
+                SELECT id, title, description, location, employment_type
+                FROM job_posting 
+                WHERE status = 'active'
+                ORDER BY created_at DESC
+                LIMIT 3
+            """)
+            dashboard_data["recommended_jobs"] = cursor.fetchall()
+            
+        elif user["role_id"] == 3:  # Recruiter
+            cursor.execute("SELECT COUNT(*) FROM job_posting WHERE posted_by = ?", (user["person_id"],))
+            dashboard_data["my_job_postings"] = cursor.fetchone()[0]
+            
+            cursor.execute("""
+                SELECT COUNT(*) FROM application a
+                JOIN job_posting jp ON a.job_posting_id = jp.id
+                WHERE jp.posted_by = ?
+            """, (user["person_id"],))
+            dashboard_data["applications_received"] = cursor.fetchone()[0]
+            
+            # Recent applications to my jobs
+            cursor.execute("""
+                SELECT p.firstname, p.lastname, jp.title, a.applied_date, ast.name as status
+                FROM application a
+                JOIN person p ON a.person_id = p.id
+                JOIN job_posting jp ON a.job_posting_id = jp.id
+                JOIN application_status ast ON a.status_id = ast.id
+                WHERE jp.posted_by = ?
+                ORDER BY a.applied_date DESC
+                LIMIT 10
+            """, (user["person_id"],))
+            dashboard_data["recent_applications"] = cursor.fetchall()
 
         conn.close()
 
-        return templates.TemplateResponse("dashboard.html", {
+        # Choose template based on role
+        template_name = "dashboard.html"
+        if user["role_id"] == 1:
+            template_name = "admin_dashboard.html"
+        elif user["role_id"] == 3:
+            template_name = "recruiter_dashboard.html"
+
+        return templates.TemplateResponse(template_name, {
             "request": request,
             "user": user,
-            "stats": {
-                "active_jobs": active_jobs,
-                "total_applications": total_applications,
-                "total_candidates": total_candidates
-            },
-            "recent_applications": recent_applications
+            "dashboard_data": dashboard_data
         })
 
     except Exception as e:
@@ -432,15 +490,22 @@ async def api_login(request: Request, username: str = Form(...), password: str =
     )
 
 @app.post("/api/auth/register")
-async def api_register(
-    username: str = Form(...),
-    password: str = Form(...),
-    email: str = Form(...),
-    firstname: str = Form(...),
-    lastname: str = Form(...)
-):
+async def api_register(request: Request):
     """API endpoint for registration."""
     try:
+        form_data = await request.form()
+        username = form_data.get("username")
+        password = form_data.get("password")
+        email = form_data.get("email")
+        firstname = form_data.get("firstname")
+        lastname = form_data.get("lastname")
+
+        if not all([username, password, email, firstname, lastname]):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "All fields are required"}
+            )
+
         conn = get_db_connection()
         cursor = conn.cursor()
 
@@ -478,6 +543,8 @@ async def api_register(
 
         conn.commit()
         conn.close()
+
+        logger.info("User registered successfully", username=username)
 
         return JSONResponse(
             status_code=201,
@@ -653,13 +720,28 @@ async def route_auth(path: str, request: Request):
 @app.api_route("/api/registration/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def route_registration(path: str, request: Request):
     """Route registration requests to registration service."""
-    return await route_to_service("registration", f"/{path}", request.method)
+    try:
+        # For now, handle registration locally until service is stable
+        if path == "register" and request.method == "POST":
+            return await api_register(request)
+        return await route_to_service("registration", f"/{path}", request.method)
+    except Exception as e:
+        logger.error("Registration routing failed", error=str(e))
+        # Fallback to local handling
+        if path == "register" and request.method == "POST":
+            return await api_register(request)
+        raise HTTPException(status_code=503, detail="Registration service unavailable")
 
 # Route to job application service
 @app.api_route("/api/applications/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
 async def route_job_applications(path: str, request: Request):
     """Route job application requests to job application service."""
-    return await route_to_service("job_application", f"/{path}", request.method)
+    try:
+        return await route_to_service("job_application", f"/{path}", request.method)
+    except Exception as e:
+        logger.error("Application service routing failed", error=str(e))
+        # Local fallback for critical functions
+        raise HTTPException(status_code=503, detail="Application service unavailable")
 
 # Error handler for unhandled exceptions
 @app.exception_handler(Exception)
