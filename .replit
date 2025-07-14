@@ -9,7 +9,7 @@ packages = ["libxcrypt"]
 run = ["sh", "-c", "python edge_service/main.py"]
 
 [workflows]
-runButton = "Run Fixed System"
+runButton = "Complete System Restart"
 
 [[workflows.workflow]]
 name = "Start Recruitment System"
@@ -120,6 +120,23 @@ args = "python edge_service/main.py"
 name = "Run Fixed System"
 author = 45004365
 mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python scripts/init_database.py"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python edge_service/main.py"
+
+[[workflows.workflow]]
+name = "Complete System Restart"
+author = 45004365
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "rm -f recruitment_system.db"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"

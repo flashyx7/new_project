@@ -802,7 +802,6 @@ async def browse_candidates(request: Request):
             "error": "Failed to load candidates"
         })
 
-# Applicant routes
 @app.get("/applicant/my-applications", response_class=HTMLResponse)
 async def my_applications(request: Request):
     """My applications page."""
