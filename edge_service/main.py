@@ -276,20 +276,20 @@ async def dashboard(request: Request):
 
         # Get role-specific dashboard data
         dashboard_data = {}
-        
+
         if user["role_id"] == 1:  # Admin
             cursor.execute("SELECT COUNT(*) FROM job_posting WHERE status = 'active'")
             dashboard_data["active_jobs"] = cursor.fetchone()[0]
-            
+
             cursor.execute("SELECT COUNT(*) FROM application")
             dashboard_data["total_applications"] = cursor.fetchone()[0]
-            
+
             cursor.execute("SELECT COUNT(*) FROM person WHERE role_id = 2")
             dashboard_data["total_candidates"] = cursor.fetchone()[0]
-            
+
             cursor.execute("SELECT COUNT(*) FROM person WHERE role_id = 3")
             dashboard_data["total_recruiters"] = cursor.fetchone()[0]
-            
+
             # Recent system activity
             cursor.execute("""
                 SELECT p.firstname, p.lastname, jp.title, a.applied_date
@@ -300,14 +300,14 @@ async def dashboard(request: Request):
                 LIMIT 10
             """)
             dashboard_data["recent_activity"] = cursor.fetchall()
-            
+
         elif user["role_id"] == 2:  # Applicant
             cursor.execute("SELECT COUNT(*) FROM job_posting WHERE status = 'active'")
             dashboard_data["active_jobs"] = cursor.fetchone()[0]
-            
+
             cursor.execute("SELECT COUNT(*) FROM application WHERE person_id = ?", (user["person_id"],))
             dashboard_data["my_applications"] = cursor.fetchone()[0]
-            
+
             # My recent applications
             cursor.execute("""
                 SELECT jp.title, a.applied_date, ast.name as status
@@ -319,7 +319,7 @@ async def dashboard(request: Request):
                 LIMIT 5
             """, (user["person_id"],))
             dashboard_data["recent_applications"] = cursor.fetchall()
-            
+
             # Recommended jobs (job matches)
             cursor.execute("""
                 SELECT id, title, description, location, employment_type, salary_min, salary_max
@@ -330,18 +330,18 @@ async def dashboard(request: Request):
             """)
             dashboard_data["recommended_jobs"] = cursor.fetchall()
             dashboard_data["job_matches"] = len(dashboard_data["recommended_jobs"])
-            
+
         elif user["role_id"] == 3:  # Recruiter
             cursor.execute("SELECT COUNT(*) FROM job_posting WHERE posted_by = ?", (user["person_id"],))
             dashboard_data["my_job_postings"] = cursor.fetchone()[0]
-            
+
             cursor.execute("""
                 SELECT COUNT(*) FROM application a
                 JOIN job_posting jp ON a.job_posting_id = jp.id
                 WHERE jp.posted_by = ?
             """, (user["person_id"],))
             dashboard_data["applications_received"] = cursor.fetchone()[0]
-            
+
             # Recent applications to my jobs
             cursor.execute("""
                 SELECT p.firstname, p.lastname, jp.title, a.applied_date, ast.name as status
@@ -629,7 +629,7 @@ async def post_job_page(request: Request):
     user = get_current_user(request)
     if not user or user["role_id"] != 3:
         return RedirectResponse(url="/login", status_code=302)
-    
+
     return templates.TemplateResponse("post_job.html", {"request": request, "user": user})
 
 @app.post("/recruiter/post-job")
@@ -993,7 +993,7 @@ async def job_details(request: Request, job_id: int):
         """, (job_id,))
 
         job = cursor.fetchone()
-        
+
         # Check if user already applied
         applied = False
         if user:
@@ -1154,10 +1154,10 @@ async def delete_user(request: Request, user_id: int):
 
         # Delete user's applications first
         cursor.execute("DELETE FROM application WHERE person_id = ?", (user_id,))
-        
+
         # Delete user's credentials
         cursor.execute("DELETE FROM credential WHERE person_id = ?", (user_id,))
-        
+
         # Delete the user
         cursor.execute("DELETE FROM person WHERE id = ?", (user_id,))
 
@@ -1378,19 +1378,19 @@ async def generate_reports(request: Request):
 
         # Get statistics for reports
         stats = {}
-        
+
         cursor.execute("SELECT COUNT(*) FROM person WHERE role_id = 2")
         stats["total_candidates"] = cursor.fetchone()[0]
-        
+
         cursor.execute("SELECT COUNT(*) FROM person WHERE role_id = 3")
         stats["total_recruiters"] = cursor.fetchone()[0]
-        
+
         cursor.execute("SELECT COUNT(*) FROM job_posting WHERE status = 'active'")
         stats["active_jobs"] = cursor.fetchone()[0]
-        
+
         cursor.execute("SELECT COUNT(*) FROM application")
         stats["total_applications"] = cursor.fetchone()[0]
-        
+
         # Monthly application stats
         cursor.execute("""
             SELECT strftime('%Y-%m', applied_date) as month, COUNT(*) as count
@@ -1443,7 +1443,7 @@ async def export_users_report(request: Request):
         import io
         output = io.StringIO()
         writer = csv.writer(output)
-        
+
         writer.writerow(['First Name', 'Last Name', 'Email', 'Role', 'Created Date'])
         for user_row in users:
             writer.writerow(user_row)
@@ -1493,7 +1493,7 @@ async def export_jobs_report(request: Request):
         import io
         output = io.StringIO()
         writer = csv.writer(output)
-        
+
         writer.writerow(['Title', 'Location', 'Type', 'Status', 'Posted By', 'Created Date', 'Applications'])
         for job in jobs:
             writer.writerow([job[0], job[1], job[2], job[3], f"{job[4]} {job[5]}", job[6], job[7]])
@@ -1541,7 +1541,7 @@ async def export_applications_report(request: Request):
         import io
         output = io.StringIO()
         writer = csv.writer(output)
-        
+
         writer.writerow(['Applicant', 'Job Title', 'Applied Date', 'Status'])
         for app in applications:
             writer.writerow([f"{app[0]} {app[1]}", app[2], app[3], app[4]])
