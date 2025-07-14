@@ -1,96 +1,88 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Float
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
-from datetime import datetime
 
-Base = declarative_base()
+"""
+Shared data models for the recruitment system.
+"""
 
-class Role(Base):
-    __tablename__ = 'role'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(45), nullable=False)
-    
-    # Relationships
-    persons = relationship("Person", back_populates="role")
+from datetime import datetime, date
+from typing import Optional, List
+from pydantic import BaseModel, EmailStr
 
-class Person(Base):
-    __tablename__ = 'person'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    firstname = Column(String(45))
-    lastname = Column(String(45))
-    date_of_birth = Column(Date)
-    email = Column(String(45))
-    role_id = Column(Integer, ForeignKey('role.id'), default=2)
-    
-    # Relationships
-    role = relationship("Role", back_populates="persons")
-    credentials = relationship("Credential", back_populates="person", uselist=False)
-    applications = relationship("Application", back_populates="person")
+# Database Models (simplified for SQLite)
+class Role:
+    def __init__(self, id: int, name: str, description: str = None):
+        self.id = id
+        self.name = name
+        self.description = description
 
-class Credential(Base):
-    __tablename__ = 'credential'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    person_id = Column(Integer, ForeignKey('person.id'), nullable=False)
-    username = Column(String(45), unique=True, nullable=False)
-    password = Column(String(255), nullable=False)
-    
-    # Relationships
-    person = relationship("Person", back_populates="credentials")
+class Person:
+    def __init__(self, id: int, firstname: str, lastname: str, email: str, 
+                 role_id: int, date_of_birth: date = None, phone: str = None, 
+                 address: str = None):
+        self.id = id
+        self.firstname = firstname
+        self.lastname = lastname
+        self.email = email
+        self.role_id = role_id
+        self.date_of_birth = date_of_birth
+        self.phone = phone
+        self.address = address
 
-class Availability(Base):
-    __tablename__ = 'availability'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    from_date = Column(Date, nullable=False)
-    to_date = Column(Date, nullable=False)
-    
-    # Relationships
-    applications = relationship("Application", back_populates="availability")
+class Credential:
+    def __init__(self, id: int, person_id: int, username: str, password: str):
+        self.id = id
+        self.person_id = person_id
+        self.username = username
+        self.password = password
 
-class Competence(Base):
-    __tablename__ = 'competence'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(45), nullable=False)
-    
-    # Relationships
-    competence_profiles = relationship("CompetenceProfile", back_populates="competence")
+class JobPosting:
+    def __init__(self, id: int, title: str, description: str, posted_by: int,
+                 requirements: str = None, salary_min: float = None, 
+                 salary_max: float = None, location: str = None,
+                 employment_type: str = 'full-time', status: str = 'active'):
+        self.id = id
+        self.title = title
+        self.description = description
+        self.posted_by = posted_by
+        self.requirements = requirements
+        self.salary_min = salary_min
+        self.salary_max = salary_max
+        self.location = location
+        self.employment_type = employment_type
+        self.status = status
 
-class Status(Base):
-    __tablename__ = 'status'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(45), nullable=False)
-    
-    # Relationships
-    applications = relationship("Application", back_populates="status")
+class Application:
+    def __init__(self, id: int, person_id: int, job_posting_id: int, 
+                 status_id: int = 1, cover_letter: str = None):
+        self.id = id
+        self.person_id = person_id
+        self.job_posting_id = job_posting_id
+        self.status_id = status_id
+        self.cover_letter = cover_letter
 
-class Application(Base):
-    __tablename__ = 'application'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    person_id = Column(Integer, ForeignKey('person.id'), nullable=False)
-    date_of_registration = Column(DateTime, default=datetime.utcnow)
-    status_id = Column(Integer, ForeignKey('status.id'), default=0)
-    availability_id = Column(Integer, ForeignKey('availability.id'), nullable=False)
-    
-    # Relationships
-    person = relationship("Person", back_populates="applications")
-    status = relationship("Status", back_populates="applications")
-    availability = relationship("Availability", back_populates="applications")
-    competence_profiles = relationship("CompetenceProfile", back_populates="application")
+class Competence:
+    def __init__(self, id: int, name: str, description: str = None):
+        self.id = id
+        self.name = name
+        self.description = description
 
-class CompetenceProfile(Base):
-    __tablename__ = 'competence_profile'
-    
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    application_id = Column(Integer, ForeignKey('application.id'), nullable=False)
-    competence_id = Column(Integer, ForeignKey('competence.id'), nullable=False)
-    years_of_experience = Column(Float)
-    
-    # Relationships
-    application = relationship("Application", back_populates="competence_profiles")
-    competence = relationship("Competence", back_populates="competence_profiles") 
+class CompetenceProfile:
+    def __init__(self, id: int, person_id: int, competence_id: int, 
+                 years_of_experience: float, proficiency_level: str = 'intermediate'):
+        self.id = id
+        self.person_id = person_id
+        self.competence_id = competence_id
+        self.years_of_experience = years_of_experience
+        self.proficiency_level = proficiency_level
+
+class Status:
+    def __init__(self, id: int, name: str, description: str = None):
+        self.id = id
+        self.name = name
+        self.description = description
+
+class Availability:
+    def __init__(self, id: int, person_id: int, from_date: date, to_date: date):
+        self.id = id
+        self.person_id = person_id
+        self.from_date = from_date
+        self.to_date = to_date

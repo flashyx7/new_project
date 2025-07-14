@@ -9,7 +9,7 @@ packages = ["libxcrypt"]
 run = ["sh", "-c", "uvicorn undefined:app --host 0.0.0.0 --port 3000"]
 
 [workflows]
-runButton = "Reinitialize and Start System"
+runButton = "Complete System Start"
 
 [[workflows.workflow]]
 name = "Start Recruitment System"
@@ -68,6 +68,23 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "rm -f recruitment_system.db"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python scripts/init_database.py"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python edge_service/main.py"
+
+[[workflows.workflow]]
+name = "Complete System Start"
+author = 45002581
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python -m pip install -r requirements.txt"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"

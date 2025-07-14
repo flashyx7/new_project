@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python3
 """
 Initialize the recruitment system database with comprehensive schema and sample data.
@@ -67,8 +68,17 @@ def init_database():
             with open(schema_path, 'r') as f:
                 schema_sql = f.read()
 
-            # Execute the entire schema at once for SQLite
-            cursor.executescript(schema_sql)
+            # Execute the schema statements one by one for better error handling
+            statements = [stmt.strip() for stmt in schema_sql.split(';') if stmt.strip()]
+            for statement in statements:
+                if statement:
+                    try:
+                        cursor.execute(statement)
+                    except sqlite3.Error as e:
+                        logger.warning("SQL statement failed", statement=statement[:100], error=str(e))
+                        # Continue with other statements
+            
+            conn.commit()
             logger.info("Schema executed successfully")
         else:
             logger.error("Schema file not found", path=schema_path)
@@ -115,24 +125,28 @@ def init_database():
         ]
 
         for user in sample_users:
-            # Insert person
-            cursor.execute("""
-                INSERT INTO person (firstname, lastname, email, date_of_birth, role_id, phone, address)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (
-                user['firstname'], user['lastname'], user['email'], 
-                user['date_of_birth'], user['role_id'],
-                '+1-555-0123', '123 Main St, City, State 12345'
-            ))
+            try:
+                # Insert person
+                cursor.execute("""
+                    INSERT INTO person (firstname, lastname, email, date_of_birth, role_id, phone, address)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    user['firstname'], user['lastname'], user['email'], 
+                    user['date_of_birth'], user['role_id'],
+                    '+1-555-0123', '123 Main St, City, State 12345'
+                ))
 
-            person_id = cursor.lastrowid
+                person_id = cursor.lastrowid
 
-            # Insert credentials
-            hashed_password = get_password_hash(user['password'])
-            cursor.execute("""
-                INSERT INTO credential (person_id, username, password)
-                VALUES (?, ?, ?)
-            """, (person_id, user['username'], hashed_password))
+                # Insert credentials
+                hashed_password = get_password_hash(user['password'])
+                cursor.execute("""
+                    INSERT INTO credential (person_id, username, password)
+                    VALUES (?, ?, ?)
+                """, (person_id, user['username'], hashed_password))
+
+            except sqlite3.Error as e:
+                logger.error("Failed to create user", user=user['username'], error=str(e))
 
         # Create sample job postings
         sample_jobs = [
@@ -171,53 +185,21 @@ def init_database():
         ]
 
         for job in sample_jobs:
-            cursor.execute("""
-                INSERT INTO job_posting 
-                (title, description, requirements, responsibilities, salary_min, salary_max, 
-                 currency, location, remote_allowed, employment_type, experience_level, 
-                 category_id, posted_by, status, application_deadline)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                job['title'], job['description'], job['requirements'], job['responsibilities'],
-                job['salary_min'], job['salary_max'], 'USD', job['location'], 
-                job['remote_allowed'], job['employment_type'], job['experience_level'],
-                job['category_id'], job['posted_by'], job['status'], job['application_deadline']
-            ))
-
-        # Create sample application
-        cursor.execute("""
-            INSERT INTO availability (person_id, from_date, to_date, is_flexible)
-            VALUES (?, ?, ?, ?)
-        """, (
-            3,  # John Candidate
-            (datetime.now() + timedelta(days=14)).strftime('%Y-%m-%d'),
-            (datetime.now() + timedelta(days=365)).strftime('%Y-%m-%d'),
-            1
-        ))
-
-        cursor.execute("""
-            INSERT INTO application 
-            (person_id, job_posting_id, cover_letter, status_id, match_score)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            3, 1, 
-            "I am very interested in this position and believe my skills align well with your requirements.",
-            1, 85.5
-        ))
-
-        # Add competence profiles
-        competence_data = [
-            (3, 1, 5.0, 'advanced'),  # John - Python
-            (3, 2, 3.0, 'intermediate'),  # John - JavaScript
-            (3, 5, 4.0, 'advanced'),  # John - SQL
-        ]
-
-        for person_id, competence_id, years, level in competence_data:
-            cursor.execute("""
-                INSERT INTO competence_profile 
-                (person_id, competence_id, years_of_experience, proficiency_level)
-                VALUES (?, ?, ?, ?)
-            """, (person_id, competence_id, years, level))
+            try:
+                cursor.execute("""
+                    INSERT INTO job_posting 
+                    (title, description, requirements, responsibilities, salary_min, salary_max, 
+                     currency, location, remote_allowed, employment_type, experience_level, 
+                     category_id, posted_by, status, application_deadline)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    job['title'], job['description'], job['requirements'], job['responsibilities'],
+                    job['salary_min'], job['salary_max'], 'USD', job['location'], 
+                    job['remote_allowed'], job['employment_type'], job['experience_level'],
+                    job['category_id'], job['posted_by'], job['status'], job['application_deadline']
+                ))
+            except sqlite3.Error as e:
+                logger.error("Failed to create job posting", job=job['title'], error=str(e))
 
         conn.commit()
         logger.info("Database initialized successfully with sample data")

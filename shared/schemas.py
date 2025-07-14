@@ -1,62 +1,64 @@
-from pydantic import BaseModel, EmailStr, Field
+
+"""
+Shared Pydantic schemas for the recruitment system.
+"""
+
+from datetime import datetime, date
 from typing import Optional, List
-from datetime import date, datetime
+from pydantic import BaseModel, EmailStr
 
-# Auth Service Schemas
-class AuthRequest(BaseModel):
+# Authentication schemas
+class LoginRequest(BaseModel):
     username: str
     password: str
 
-class AuthTokenResponse(BaseModel):
-    token: str
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user_id: int
+    username: str
 
-class AuthFailResponse(BaseModel):
-    message: str
-
-# Registration Service Schemas
+# Registration schemas
 class RegistrationForm(BaseModel):
-    firstname: str = Field(..., min_length=1, max_length=45)
-    lastname: str = Field(..., min_length=1, max_length=45)
-    date_of_birth: date
-    email: EmailStr
-    username: str = Field(..., min_length=1, max_length=45)
-    password: str = Field(..., min_length=6)
-    role_id: Optional[int] = 2  # Default to Applicant role
-
-class UserCredentialsDTO(BaseModel):
     username: str
     password: str
-    person_id: int
+    email: EmailStr
+    firstname: str
+    lastname: str
+    date_of_birth: Optional[date] = None
+    role_id: Optional[int] = 2  # Default to Applicant
 
 class RegistrationResponse(BaseModel):
     status: str
-    message: Optional[str] = None
-    errors: Optional[List[str]] = None
+    message: str
 
+# Person schemas
 class PersonResponse(BaseModel):
     id: int
     firstname: str
     lastname: str
-    date_of_birth: date
     email: str
     role_id: int
+    date_of_birth: Optional[date] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
 
     class Config:
         from_attributes = True
 
-# Job Application Service Schemas
-class AvailabilityForm(BaseModel):
-    from_date: date
-    to_date: date
-
+# Job application schemas
 class CompetenceForm(BaseModel):
     competence_id: int
     years_of_experience: float
 
+class AvailabilityForm(BaseModel):
+    from_date: date
+    to_date: date
+
 class ApplicationForm(BaseModel):
     person_id: int
-    availability: AvailabilityForm
     competences: List[CompetenceForm]
+    availability: AvailabilityForm
 
 class ApplicationParamForm(BaseModel):
     person_id: Optional[int] = None
@@ -67,29 +69,19 @@ class ApplicationParamForm(BaseModel):
 class ApplicationStatusForm(BaseModel):
     status_id: int
 
+# Response schemas
 class CompetenceResponse(BaseModel):
     id: int
     name: str
 
-    class Config:
-        from_attributes = True
+class StatusResponse(BaseModel):
+    id: int
+    name: str
 
 class AvailabilityResponse(BaseModel):
     id: int
     from_date: date
     to_date: date
-
-    class Config:
-        from_attributes = True
-
-class CompetenceProfileResponse(BaseModel):
-    id: int
-    competence_id: int
-    years_of_experience: float
-    competence: CompetenceResponse
-
-    class Config:
-        from_attributes = True
 
 class ApplicationResponse(BaseModel):
     id: int
@@ -98,21 +90,21 @@ class ApplicationResponse(BaseModel):
     status_id: int
     availability_id: int
     availability: AvailabilityResponse
-    competences: List[CompetenceProfileResponse]
-    person: PersonResponse
-
-    class Config:
-        from_attributes = True
-
-class StatusResponse(BaseModel):
-    id: int
-    name: str
-
-    class Config:
-        from_attributes = True
+    competences: List[dict]
+    person: dict
 
 class RequestResponse(BaseModel):
     message: str
 
 class RequestListResponse(BaseModel):
-    data: List[ApplicationResponse] 
+    data: List[ApplicationResponse]
+
+# Auth schemas
+class AuthRequest(BaseModel):
+    username: str
+    password: str
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str
+    user_info: dict

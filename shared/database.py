@@ -101,7 +101,21 @@ db_manager = DatabaseManager()
 
 def get_db_connection():
     """Get database connection (for backward compatibility)."""
-    return db_manager.get_connection()
+    return sqlite3.connect(DB_PATH)
+
+def get_db():
+    """Get database connection for dependency injection."""
+    return get_db_connection()
+
+def create_tables():
+    """Create database tables."""
+    # This is handled by the init_database.py script
+    pass
+
+def init_db():
+    """Initialize database."""
+    # This is handled by the init_database.py script
+    pass
 
 def test_connection() -> bool:
     """Test database connection."""
