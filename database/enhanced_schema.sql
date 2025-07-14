@@ -1,53 +1,20 @@
 -- Enhanced Database Schema for Recruitment System
 -- SQLite implementation with comprehensive tables
-```
 
-```sql
 PRAGMA foreign_keys = ON;
-```
 
-```sql
 -- Drop existing tables if they exist (in reverse order of dependencies)
 DROP TABLE IF EXISTS competence_profile;
-```
-
-```sql
 DROP TABLE IF EXISTS application;
-```
-
-```sql
 DROP TABLE IF EXISTS availability;
-```
-
-```sql
 DROP TABLE IF EXISTS job_posting;
-```
-
-```sql
 DROP TABLE IF EXISTS credential;
-```
-
-```sql
 DROP TABLE IF EXISTS person;
-```
-
-```sql
 DROP TABLE IF EXISTS job_category;
-```
-
-```sql
 DROP TABLE IF EXISTS application_status;
-```
-
-```sql
 DROP TABLE IF EXISTS competence;
-```
-
-```sql
 DROP TABLE IF EXISTS role;
-```
 
-```sql
 -- Core lookup tables
 CREATE TABLE role (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,36 +22,28 @@ CREATE TABLE role (
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-```
 
-```sql
 CREATE TABLE competence (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-```
 
-```sql
 CREATE TABLE application_status (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(50) NOT NULL UNIQUE,
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-```
 
-```sql
 CREATE TABLE job_category (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-```
 
-```sql
 -- Main entity tables
 CREATE TABLE person (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,9 +58,7 @@ CREATE TABLE person (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (role_id) REFERENCES role(id)
 );
-```
 
-```sql
 CREATE TABLE credential (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id INTEGER NOT NULL,
@@ -111,9 +68,7 @@ CREATE TABLE credential (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (person_id) REFERENCES person(id) ON DELETE CASCADE
 );
-```
 
-```sql
 CREATE TABLE job_posting (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title VARCHAR(200) NOT NULL,
@@ -136,9 +91,7 @@ CREATE TABLE job_posting (
     FOREIGN KEY (category_id) REFERENCES job_category(id),
     FOREIGN KEY (posted_by) REFERENCES person(id)
 );
-```
 
-```sql
 CREATE TABLE availability (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id INTEGER NOT NULL,
@@ -148,9 +101,7 @@ CREATE TABLE availability (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (person_id) REFERENCES person(id) ON DELETE CASCADE
 );
-```
 
-```sql
 CREATE TABLE application (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id INTEGER NOT NULL,
@@ -167,9 +118,7 @@ CREATE TABLE application (
     FOREIGN KEY (status_id) REFERENCES application_status(id),
     UNIQUE(person_id, job_posting_id)
 );
-```
 
-```sql
 CREATE TABLE competence_profile (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     person_id INTEGER NOT NULL,
@@ -181,18 +130,14 @@ CREATE TABLE competence_profile (
     FOREIGN KEY (competence_id) REFERENCES competence(id),
     UNIQUE(person_id, competence_id)
 );
-```
 
-```sql
 -- Insert default data
 INSERT INTO role (name, description) VALUES
 ('Recruiter', 'HR personnel who manage job postings and applications'),
 ('Applicant', 'Job seekers who apply for positions'),
 ('Admin', 'System administrators with full access'),
 ('Hiring Manager', 'Managers who make hiring decisions');
-```
 
-```sql
 INSERT INTO competence (name, description) VALUES
 ('Python', 'Python programming language'),
 ('JavaScript', 'JavaScript programming language'),
@@ -204,9 +149,7 @@ INSERT INTO competence (name, description) VALUES
 ('AWS', 'Amazon Web Services cloud platform'),
 ('Machine Learning', 'ML and AI technologies'),
 ('Project Management', 'Project management skills');
-```
 
-```sql
 INSERT INTO application_status (name, description) VALUES
 ('Submitted', 'Application has been submitted'),
 ('Under Review', 'Application is being reviewed'),
@@ -214,9 +157,7 @@ INSERT INTO application_status (name, description) VALUES
 ('Accepted', 'Application has been accepted'),
 ('Rejected', 'Application has been rejected'),
 ('Withdrawn', 'Application was withdrawn by applicant');
-```
 
-```sql
 INSERT INTO job_category (name, description) VALUES
 ('Software Development', 'Programming and software engineering roles'),
 ('Data Science', 'Data analysis and machine learning roles'),
@@ -228,28 +169,10 @@ INSERT INTO job_category (name, description) VALUES
 ('Marketing', 'Marketing and communications'),
 ('Human Resources', 'HR and talent management'),
 ('Finance', 'Financial and accounting roles');
-```
 
-```sql
 -- Create indexes for better performance
 CREATE INDEX idx_person_email ON person(email);
-```
-
-```sql
 CREATE INDEX idx_credential_username ON credential(username);
-```
-
-```sql
 CREATE INDEX idx_application_person ON application(person_id);
-```
-
-```sql
 CREATE INDEX idx_application_job ON application(job_posting_id);
-```
-
-```sql
 CREATE INDEX idx_competence_profile_person ON competence_profile(person_id);
-```
-
-```
-</replit_final_file>

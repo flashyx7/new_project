@@ -1,190 +1,273 @@
-// Frontend JavaScript for the Recruitment System
 
-class RecruitmentApp {
-    constructor() {
-        this.initializeEventListeners();
-        this.loadJobs();
+// Application JavaScript
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Application JavaScript loaded');
+
+    // Handle login form
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', handleLogin);
     }
 
-    initializeEventListeners() {
-        // Login form
-        const loginForm = document.getElementById('loginForm');
-        if (loginForm) {
-            loginForm.addEventListener('submit', (e) => this.handleLogin(e));
-        }
+    // Handle registration form
+    const registerForm = document.getElementById('registerForm');
+    if (registerForm) {
+        registerForm.addEventListener('submit', handleRegistration);
+    }
 
-        // Registration form
-        const registerForm = document.getElementById('registerForm');
-        if (registerForm) {
-            registerForm.addEventListener('submit', (e) => this.handleRegistration(e));
-        }
+    // Handle job application forms
+    const jobApplicationForms = document.querySelectorAll('.job-application-form');
+    jobApplicationForms.forEach(form => {
+        form.addEventListener('submit', handleJobApplication);
+    });
 
-        // Job application forms
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('apply-btn')) {
-                this.handleJobApplication(e);
-            }
+    // Load jobs on jobs page
+    if (window.location.pathname === '/jobs') {
+        loadJobs();
+    }
+});
+
+async function handleLogin(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    const errorDiv = document.getElementById('loginError');
+    const submitButton = form.querySelector('button[type="submit"]');
+    
+    // Clear previous errors
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+    }
+
+    // Disable submit button
+    if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Logging in...';
+    }
+
+    try {
+        const response = await fetch('/api/auth/login', {
+            method: 'POST',
+            body: formData
         });
-    }
 
-    async handleLogin(event) {
-        event.preventDefault();
+        const result = await response.json();
 
-        const form = event.target;
-        const formData = new FormData(form);
-
-        try {
-            const response = await fetch('/api/auth/login', {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                // Success - redirect to dashboard
-                window.location.href = '/dashboard';
-            } else {
-                // Show error
-                this.showError('loginError', result.error || 'Login failed');
-            }
-        } catch (error) {
-            console.error('Login error:', error);
-            this.showError('loginError', 'Network error. Please try again.');
-        }
-    }
-
-    async handleRegistration(event) {
-        event.preventDefault();
-
-        const form = event.target;
-        const formData = new FormData(form);
-
-        // Validate passwords match
-        const password = formData.get('password');
-        const confirmPassword = formData.get('confirm_password');
-
-        if (password !== confirmPassword) {
-            this.showError('registerError', 'Passwords do not match');
-            return;
-        }
-
-        try {
-            const response = await fetch('/api/auth/register', {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                // Success - redirect to login
-                window.location.href = '/login?message=Registration successful';
-            } else {
-                // Show error
-                this.showError('registerError', result.error || 'Registration failed');
-            }
-        } catch (error) {
-            console.error('Registration error:', error);
-            this.showError('registerError', 'Network error. Please try again.');
-        }
-    }
-
-    async handleJobApplication(event) {
-        event.preventDefault();
-
-        const jobId = event.target.dataset.jobId;
-        const coverLetter = prompt('Please enter a cover letter for this application:');
-
-        if (!coverLetter) {
-            return;
-        }
-
-        try {
-            const formData = new FormData();
-            formData.append('cover_letter', coverLetter);
-
-            const response = await fetch(`/jobs/${jobId}/apply`, {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                alert('Application submitted successfully!');
-                event.target.disabled = true;
-                event.target.textContent = 'Applied';
-            } else {
-                alert(result.detail || 'Application failed');
-            }
-        } catch (error) {
-            console.error('Application error:', error);
-            alert('Network error. Please try again.');
-        }
-    }
-
-    async loadJobs() {
-        const jobsContainer = document.getElementById('jobsContainer');
-        if (!jobsContainer) return;
-
-        try {
-            const response = await fetch('/api/jobs');
-            const data = await response.json();
-
-            if (response.ok && data.jobs) {
-                this.renderJobs(data.jobs, jobsContainer);
-            } else {
-                jobsContainer.innerHTML = '<p class="error">Failed to load jobs</p>';
-            }
-        } catch (error) {
-            console.error('Error loading jobs:', error);
-            jobsContainer.innerHTML = '<p class="error">Network error loading jobs</p>';
-        }
-    }
-
-    renderJobs(jobs, container) {
-        if (jobs.length === 0) {
-            container.innerHTML = '<p>No jobs available at the moment.</p>';
-            return;
-        }
-
-        const jobsHtml = jobs.map(job => `
-            <div class="job-card">
-                <h3>${this.escapeHtml(job.title)}</h3>
-                <p class="job-location">${this.escapeHtml(job.location || 'Not specified')}</p>
-                <p class="job-description">${this.escapeHtml(job.description)}</p>
-                ${job.salary_min && job.salary_max ? 
-                    `<p class="job-salary">$${job.salary_min.toLocaleString()} - $${job.salary_max.toLocaleString()}</p>` : 
-                    ''
-                }
-                <p class="job-type">${this.escapeHtml(job.employment_type || 'full-time')} • ${this.escapeHtml(job.experience_level || 'mid')}</p>
-                <button class="apply-btn" data-job-id="${job.id}">Apply Now</button>
-            </div>
-        `).join('');
-
-        container.innerHTML = jobsHtml;
-    }
-
-    showError(elementId, message) {
-        const errorElement = document.getElementById(elementId);
-        if (errorElement) {
-            errorElement.textContent = message;
-            errorElement.style.display = 'block';
+        if (response.ok) {
+            // Login successful
+            window.location.href = '/dashboard';
         } else {
-            alert(message);
+            // Login failed
+            showError(errorDiv, result.error || 'Login failed');
         }
-    }
-
-    escapeHtml(text) {
-        if (!text) return '';
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    } catch (error) {
+        console.error('Login error:', error);
+        showError(errorDiv, 'Network error. Please try again.');
+    } finally {
+        // Re-enable submit button
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Login';
+        }
     }
 }
 
-// Initialize the app when the DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    new RecruitmentApp();
-});
+async function handleRegistration(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    const errorDiv = document.getElementById('registerError');
+    const successDiv = document.getElementById('registerSuccess');
+    const submitButton = form.querySelector('button[type="submit"]');
+    
+    // Clear previous messages
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+        errorDiv.textContent = '';
+    }
+    if (successDiv) {
+        successDiv.style.display = 'none';
+        successDiv.textContent = '';
+    }
+
+    // Basic validation
+    const password = formData.get('password');
+    const confirmPassword = formData.get('confirmPassword');
+    
+    if (password !== confirmPassword) {
+        showError(errorDiv, 'Passwords do not match');
+        return;
+    }
+
+    if (password.length < 6) {
+        showError(errorDiv, 'Password must be at least 6 characters long');
+        return;
+    }
+
+    // Disable submit button
+    if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.textContent = 'Registering...';
+    }
+
+    try {
+        const response = await fetch('/api/auth/register', {
+            method: 'POST',
+            body: formData
+        });
+
+        let result;
+        try {
+            result = await response.json();
+        } catch (parseError) {
+            console.error('Failed to parse response as JSON:', parseError);
+            result = { error: 'Invalid response from server' };
+        }
+
+        if (response.ok) {
+            // Registration successful
+            showSuccess(successDiv, result.message || 'Registration successful! You can now login.');
+            form.reset();
+            
+            // Redirect to login page after 2 seconds
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 2000);
+        } else {
+            // Registration failed
+            console.error('Registration failed:', result);
+            showError(errorDiv, result.error || 'Registration failed. Please try again.');
+        }
+    } catch (error) {
+        console.error('Registration error:', error);
+        showError(errorDiv, 'Network error. Please try again.');
+    } finally {
+        // Re-enable submit button
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.textContent = 'Register';
+        }
+    }
+}
+
+async function handleJobApplication(event) {
+    event.preventDefault();
+    
+    const form = event.target;
+    const formData = new FormData(form);
+    const jobId = form.dataset.jobId;
+    
+    try {
+        const response = await fetch(`/jobs/${jobId}/apply`, {
+            method: 'POST',
+            body: formData
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert('Application submitted successfully!');
+            form.reset();
+        } else {
+            alert(result.detail || 'Application failed');
+        }
+    } catch (error) {
+        console.error('Application error:', error);
+        alert('Network error. Please try again.');
+    }
+}
+
+async function loadJobs() {
+    try {
+        const response = await fetch('/api/jobs');
+        const data = await response.json();
+        
+        if (response.ok && data.jobs) {
+            displayJobs(data.jobs);
+        } else {
+            console.error('Failed to load jobs:', data);
+        }
+    } catch (error) {
+        console.error('Error loading jobs:', error);
+    }
+}
+
+function displayJobs(jobs) {
+    const jobsContainer = document.getElementById('jobsContainer');
+    if (!jobsContainer) return;
+
+    if (jobs.length === 0) {
+        jobsContainer.innerHTML = '<p>No jobs available at the moment.</p>';
+        return;
+    }
+
+    jobsContainer.innerHTML = jobs.map(job => `
+        <div class="job-card">
+            <h3>${escapeHtml(job.title)}</h3>
+            <p class="job-meta">
+                <span>📍 ${escapeHtml(job.location || 'Remote')}</span>
+                <span>💼 ${escapeHtml(job.employment_type || 'Full-time')}</span>
+                <span>📊 ${escapeHtml(job.experience_level || 'Mid-level')}</span>
+            </p>
+            <p class="job-description">${escapeHtml(job.description)}</p>
+            ${job.salary_min && job.salary_max ? 
+                `<p class="job-salary">💰 $${job.salary_min.toLocaleString()} - $${job.salary_max.toLocaleString()}</p>` : 
+                ''
+            }
+            <button onclick="showJobDetails(${job.id})" class="btn btn-primary">View Details</button>
+        </div>
+    `).join('');
+}
+
+function showJobDetails(jobId) {
+    // This would show job details in a modal or navigate to a details page
+    window.location.href = `/jobs/${jobId}`;
+}
+
+function showError(errorDiv, message) {
+    if (errorDiv) {
+        errorDiv.textContent = message;
+        errorDiv.style.display = 'block';
+        errorDiv.className = 'alert alert-danger';
+    } else {
+        alert(message);
+    }
+}
+
+function showSuccess(successDiv, message) {
+    if (successDiv) {
+        successDiv.textContent = message;
+        successDiv.style.display = 'block';
+        successDiv.className = 'alert alert-success';
+    } else {
+        alert(message);
+    }
+}
+
+function escapeHtml(unsafe) {
+    return unsafe
+         .replace(/&/g, "&amp;")
+         .replace(/</g, "&lt;")
+         .replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;")
+         .replace(/'/g, "&#039;");
+}
+
+// Utility functions
+function showLoading(element) {
+    if (element) {
+        element.innerHTML = '<div class="loading">Loading...</div>';
+    }
+}
+
+function hideLoading(element) {
+    if (element) {
+        const loading = element.querySelector('.loading');
+        if (loading) {
+            loading.remove();
+        }
+    }
+}

@@ -68,15 +68,27 @@ def init_database():
             with open(schema_path, 'r') as f:
                 schema_sql = f.read()
 
-            # Execute the schema statements one by one for better error handling
-            statements = [stmt.strip() for stmt in schema_sql.split(';') if stmt.strip()]
+            # Split into individual statements and execute one by one
+            statements = []
+            current_statement = ""
+            
+            for line in schema_sql.split('\n'):
+                line = line.strip()
+                if line and not line.startswith('--'):
+                    current_statement += " " + line
+                    if line.endswith(';'):
+                        statements.append(current_statement.strip())
+                        current_statement = ""
+            
+            # Execute each statement
             for statement in statements:
                 if statement:
                     try:
                         cursor.execute(statement)
+                        logger.debug("Executed SQL statement", statement=statement[:50] + "...")
                     except sqlite3.Error as e:
-                        logger.warning("SQL statement failed", statement=statement[:100], error=str(e))
-                        # Continue with other statements
+                        logger.error("SQL statement failed", statement=statement[:100], error=str(e))
+                        # Don't continue with failed statements
             
             conn.commit()
             logger.info("Schema executed successfully")
@@ -145,6 +157,8 @@ def init_database():
                     VALUES (?, ?, ?)
                 """, (person_id, user['username'], hashed_password))
 
+                logger.info("Created user", username=user['username'])
+
             except sqlite3.Error as e:
                 logger.error("Failed to create user", user=user['username'], error=str(e))
 
@@ -198,11 +212,17 @@ def init_database():
                     job['remote_allowed'], job['employment_type'], job['experience_level'],
                     job['category_id'], job['posted_by'], job['status'], job['application_deadline']
                 ))
+                logger.info("Created job posting", title=job['title'])
             except sqlite3.Error as e:
                 logger.error("Failed to create job posting", job=job['title'], error=str(e))
 
         conn.commit()
         logger.info("Database initialized successfully with sample data")
+
+        # Verify tables were created
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = cursor.fetchall()
+        logger.info("Created tables", tables=[table[0] for table in tables])
 
         # Print sample credentials
         print("\n" + "="*50)
