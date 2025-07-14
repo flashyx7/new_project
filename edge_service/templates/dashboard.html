@@ -18,7 +18,7 @@
             <h5>My Applications</h5>
             <p class="mb-0">Track your job applications</p>
             <div class="mt-3">
-                <h3 id="applicationCount" class="text-primary">Loading...</h3>
+                <h3 class="text-primary">{{ dashboard_data.my_applications or 0 }}</h3>
                 <small class="text-muted">Total Applications</small>
             </div>
         </div>
@@ -40,7 +40,7 @@
             <h5>Job Matches</h5>
             <p class="mb-0">Jobs matching your skills</p>
             <div class="mt-3">
-                <h3 id="jobMatchCount" class="text-info">Loading...</h3>
+                <h3 class="text-info">{{ dashboard_data.job_matches or 0 }}</h3>
                 <small class="text-muted">Available Positions</small>
             </div>
         </div>

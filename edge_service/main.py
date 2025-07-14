@@ -320,15 +320,16 @@ async def dashboard(request: Request):
             """, (user["person_id"],))
             dashboard_data["recent_applications"] = cursor.fetchall()
             
-            # Recommended jobs
+            # Recommended jobs (job matches)
             cursor.execute("""
-                SELECT id, title, description, location, employment_type
+                SELECT id, title, description, location, employment_type, salary_min, salary_max
                 FROM job_posting 
                 WHERE status = 'active'
                 ORDER BY created_at DESC
-                LIMIT 3
+                LIMIT 5
             """)
             dashboard_data["recommended_jobs"] = cursor.fetchall()
+            dashboard_data["job_matches"] = len(dashboard_data["recommended_jobs"])
             
         elif user["role_id"] == 3:  # Recruiter
             cursor.execute("SELECT COUNT(*) FROM job_posting WHERE posted_by = ?", (user["person_id"],))
@@ -358,10 +359,12 @@ async def dashboard(request: Request):
 
         # Choose template based on role
         template_name = "dashboard.html"
-        if user["role_id"] == 1:
+        if user["role_id"] == 1:  # Admin
             template_name = "admin_dashboard.html"
-        elif user["role_id"] == 3:
+        elif user["role_id"] == 3:  # Recruiter
             template_name = "recruiter_dashboard.html"
+        else:  # Applicant (role_id == 2)
+            template_name = "dashboard.html"
 
         return templates.TemplateResponse(template_name, {
             "request": request,
@@ -819,6 +822,49 @@ async def my_applications(request: Request):
             "error": "Failed to load applications"
         })
 
+@app.post("/applicant/delete-application/{application_id}")
+async def delete_application(request: Request, application_id: int):
+    """Delete an application."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 2:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Verify the application belongs to the user
+        cursor.execute(
+            "SELECT id FROM application WHERE id = ? AND person_id = ?",
+            (application_id, user["person_id"])
+        )
+
+        if not cursor.fetchone():
+            conn.close()
+            return JSONResponse(
+                status_code=404,
+                content={"error": "Application not found"}
+            )
+
+        # Delete the application
+        cursor.execute("DELETE FROM application WHERE id = ? AND person_id = ?", 
+                      (application_id, user["person_id"]))
+
+        conn.commit()
+        conn.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={"message": "Application deleted successfully"}
+        )
+
+    except Exception as e:
+        logger.error("Application deletion failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to delete application"}
+        )
+
 @app.get("/applicant/profile", response_class=HTMLResponse)
 async def profile_page(request: Request):
     """Profile page."""
@@ -842,6 +888,44 @@ async def profile_page(request: Request):
             "request": request,
             "user": user,
             "profile": profile
+        })
+
+@app.post("/applicant/profile")
+async def update_profile(
+    request: Request,
+    firstname: str = Form(...),
+    lastname: str = Form(...),
+    email: str = Form(...),
+    date_of_birth: str = Form(None),
+    phone: str = Form(None),
+    address: str = Form(None)
+):
+    """Update user profile."""
+    user = get_current_user(request)
+    if not user:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE person 
+            SET firstname = ?, lastname = ?, email = ?, date_of_birth = ?, phone = ?, address = ?
+            WHERE id = ?
+        """, (firstname, lastname, email, date_of_birth, phone, address, user["person_id"]))
+
+        conn.commit()
+        conn.close()
+
+        return RedirectResponse(url="/applicant/profile?success=Profile updated successfully", status_code=302)
+
+    except Exception as e:
+        logger.error("Profile update failed", error=str(e))
+        return templates.TemplateResponse("profile.html", {
+            "request": request,
+            "user": user,
+            "error": "Failed to update profile. Please try again."
         })
 
     except Exception as e:
@@ -939,6 +1023,79 @@ async def manage_users(request: Request):
             "error": "Failed to load users"
         })
 
+@app.post("/admin/users/{user_id}/edit")
+async def edit_user(request: Request, user_id: int):
+    """Edit user details."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        form_data = await request.form()
+        firstname = form_data.get("firstname")
+        lastname = form_data.get("lastname")
+        email = form_data.get("email")
+        role_id = form_data.get("role_id")
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE person 
+            SET firstname = ?, lastname = ?, email = ?, role_id = ?
+            WHERE id = ?
+        """, (firstname, lastname, email, role_id, user_id))
+
+        conn.commit()
+        conn.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={"message": "User updated successfully"}
+        )
+
+    except Exception as e:
+        logger.error("User edit failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to update user"}
+        )
+
+@app.delete("/admin/users/{user_id}")
+async def delete_user(request: Request, user_id: int):
+    """Delete user."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Delete user's applications first
+        cursor.execute("DELETE FROM application WHERE person_id = ?", (user_id,))
+        
+        # Delete user's credentials
+        cursor.execute("DELETE FROM credential WHERE person_id = ?", (user_id,))
+        
+        # Delete the user
+        cursor.execute("DELETE FROM person WHERE id = ?", (user_id,))
+
+        conn.commit()
+        conn.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={"message": "User deleted successfully"}
+        )
+
+    except Exception as e:
+        logger.error("User deletion failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to delete user"}
+        )
+
 @app.get("/admin/jobs", response_class=HTMLResponse)
 async def manage_jobs(request: Request):
     """Manage jobs page."""
@@ -978,6 +1135,115 @@ async def manage_jobs(request: Request):
             "user": user,
             "error": "Failed to load jobs"
         })
+
+@app.get("/admin/jobs/{job_id}/view")
+async def view_job_admin(request: Request, job_id: int):
+    """View job details for admin."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT j.*, p.firstname, p.lastname
+            FROM job_posting j
+            JOIN person p ON j.posted_by = p.id
+            WHERE j.id = ?
+        """, (job_id,))
+
+        job = cursor.fetchone()
+        conn.close()
+
+        if not job:
+            return JSONResponse(
+                status_code=404,
+                content={"error": "Job not found"}
+            )
+
+        return JSONResponse(
+            status_code=200,
+            content={"job": job}
+        )
+
+    except Exception as e:
+        logger.error("Job view failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to load job"}
+        )
+
+@app.post("/admin/jobs/{job_id}/edit")
+async def edit_job_admin(request: Request, job_id: int):
+    """Edit job for admin."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        form_data = await request.form()
+        title = form_data.get("title")
+        description = form_data.get("description")
+        location = form_data.get("location")
+        status = form_data.get("status")
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE job_posting 
+            SET title = ?, description = ?, location = ?, status = ?
+            WHERE id = ?
+        """, (title, description, location, status, job_id))
+
+        conn.commit()
+        conn.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={"message": "Job updated successfully"}
+        )
+
+    except Exception as e:
+        logger.error("Job edit failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to update job"}
+        )
+
+@app.post("/admin/jobs/{job_id}/deactivate")
+async def deactivate_job(request: Request, job_id: int):
+    """Deactivate job."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE job_posting 
+            SET status = 'inactive'
+            WHERE id = ?
+        """, (job_id,))
+
+        conn.commit()
+        conn.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={"message": "Job deactivated successfully"}
+        )
+
+    except Exception as e:
+        logger.error("Job deactivation failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to deactivate job"}
+        )
 
 @app.get("/admin/applications", response_class=HTMLResponse)
 async def admin_applications(request: Request):
@@ -1070,6 +1336,207 @@ async def generate_reports(request: Request):
             "user": user,
             "error": "Failed to load reports"
         })
+
+@app.get("/admin/export/users")
+async def export_users_report(request: Request):
+    """Export users report."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT p.firstname, p.lastname, p.email, r.name as role, p.created_at
+            FROM person p
+            JOIN role r ON p.role_id = r.id
+            ORDER BY p.created_at DESC
+        """)
+
+        users = cursor.fetchall()
+        conn.close()
+
+        # Generate CSV content
+        import csv
+        import io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        writer.writerow(['First Name', 'Last Name', 'Email', 'Role', 'Created Date'])
+        for user_row in users:
+            writer.writerow(user_row)
+
+        csv_content = output.getvalue()
+        output.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={"data": csv_content, "filename": "users_report.csv"}
+        )
+
+    except Exception as e:
+        logger.error("User export failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to export users"}
+        )
+
+@app.get("/admin/export/jobs")
+async def export_jobs_report(request: Request):
+    """Export jobs report."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT j.title, j.location, j.employment_type, j.status, 
+                   p.firstname, p.lastname, j.created_at,
+                   COUNT(a.id) as application_count
+            FROM job_posting j
+            JOIN person p ON j.posted_by = p.id
+            LEFT JOIN application a ON j.id = a.job_posting_id
+            GROUP BY j.id
+            ORDER BY j.created_at DESC
+        """)
+
+        jobs = cursor.fetchall()
+        conn.close()
+
+        # Generate CSV content
+        import csv
+        import io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        writer.writerow(['Title', 'Location', 'Type', 'Status', 'Posted By', 'Created Date', 'Applications'])
+        for job in jobs:
+            writer.writerow([job[0], job[1], job[2], job[3], f"{job[4]} {job[5]}", job[6], job[7]])
+
+        csv_content = output.getvalue()
+        output.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={"data": csv_content, "filename": "jobs_report.csv"}
+        )
+
+    except Exception as e:
+        logger.error("Jobs export failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to export jobs"}
+        )
+
+@app.get("/admin/export/applications")
+async def export_applications_report(request: Request):
+    """Export applications report."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT p.firstname, p.lastname, jp.title, a.applied_date, ast.name as status
+            FROM application a
+            JOIN person p ON a.person_id = p.id
+            JOIN job_posting jp ON a.job_posting_id = jp.id
+            JOIN application_status ast ON a.status_id = ast.id
+            ORDER BY a.applied_date DESC
+        """)
+
+        applications = cursor.fetchall()
+        conn.close()
+
+        # Generate CSV content
+        import csv
+        import io
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        writer.writerow(['Applicant', 'Job Title', 'Applied Date', 'Status'])
+        for app in applications:
+            writer.writerow([f"{app[0]} {app[1]}", app[2], app[3], app[4]])
+
+        csv_content = output.getvalue()
+        output.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={"data": csv_content, "filename": "applications_report.csv"}
+        )
+
+    except Exception as e:
+        logger.error("Applications export failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to export applications"}
+        )
+
+@app.get("/admin/analytics")
+async def system_analytics(request: Request):
+    """Get system analytics."""
+    user = get_current_user(request)
+    if not user or user["role_id"] != 1:
+        return RedirectResponse(url="/login", status_code=302)
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        analytics = {}
+
+        # User growth
+        cursor.execute("""
+            SELECT DATE(created_at) as date, COUNT(*) as count
+            FROM person
+            WHERE created_at >= date('now', '-30 days')
+            GROUP BY DATE(created_at)
+            ORDER BY date
+        """)
+        analytics["user_growth"] = cursor.fetchall()
+
+        # Application trends
+        cursor.execute("""
+            SELECT DATE(applied_date) as date, COUNT(*) as count
+            FROM application
+            WHERE applied_date >= date('now', '-30 days')
+            GROUP BY DATE(applied_date)
+            ORDER BY date
+        """)
+        analytics["application_trends"] = cursor.fetchall()
+
+        # Job posting trends
+        cursor.execute("""
+            SELECT DATE(created_at) as date, COUNT(*) as count
+            FROM job_posting
+            WHERE created_at >= date('now', '-30 days')
+            GROUP BY DATE(created_at)
+            ORDER BY date
+        """)
+        analytics["job_trends"] = cursor.fetchall()
+
+        conn.close()
+
+        return JSONResponse(
+            status_code=200,
+            content={"analytics": analytics}
+        )
+
+    except Exception as e:
+        logger.error("Analytics failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Failed to load analytics"}
+        )
 
 @app.get("/logout")
 async def logout(request: Request):

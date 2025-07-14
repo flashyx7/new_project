@@ -1,4 +1,7 @@
+Adding job management JavaScript functionality to the admin panel.
+```
 
+```html
 {% extends "base.html" %}
 
 {% block title %}Manage Jobs - Admin Panel{% endblock %}
@@ -16,7 +19,7 @@
         {% if error %}
             <div class="alert alert-danger">{{ error }}</div>
         {% endif %}
-        
+
         <div class="card">
             <div class="card-body">
                 {% if jobs %}
@@ -68,3 +71,82 @@
     </div>
 </div>
 {% endblock %}
+
+{% block scripts %}
+<script>
+async function viewJob(jobId) {
+    try {
+        const response = await fetch(`/admin/jobs/${jobId}/view`);
+        const result = await response.json();
+
+        if (response.ok) {
+            alert(`Job Details:\nTitle: ${result.job[1]}\nLocation: ${result.job[3]}\nStatus: ${result.job[4]}`);
+        } else {
+            alert('Failed to load job: ' + result.error);
+        }
+    } catch (error) {
+        console.error('View job failed:', error);
+        alert('Failed to load job');
+    }
+}
+
+async function editJob(jobId) {
+    const title = prompt('Enter new job title:');
+    const description = prompt('Enter new description:');
+    const location = prompt('Enter new location:');
+    const status = prompt('Enter status (active/inactive):');
+
+    if (title && description && location && status) {
+        try {
+            const formData = new FormData();
+            formData.append('title', title);
+            formData.append('description', description);
+            formData.append('location', location);
+            formData.append('status', status);
+
+            const response = await fetch(`/admin/jobs/${jobId}/edit`, {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                alert('Job updated successfully');
+                location.reload();
+            } else {
+                alert('Failed to update job: ' + result.error);
+            }
+        } catch (error) {
+            console.error('Edit job failed:', error);
+            alert('Failed to update job');
+        }
+    }
+}
+
+async function deactivateJob(jobId) {
+    if (!confirm('Are you sure you want to deactivate this job?')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/admin/jobs/${jobId}/deactivate`, {
+            method: 'POST'
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            alert('Job deactivated successfully');
+            location.reload();
+        } else {
+            alert('Failed to deactivate job: ' + result.error);
+        }
+    } catch (error) {
+        console.error('Deactivate job failed:', error);
+        alert('Failed to deactivate job');
+    }
+}
+</script>
+{% endblock %}
+```Adding JavaScript functions for viewing, editing, and deactivating jobs in the admin panel.
