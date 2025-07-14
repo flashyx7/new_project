@@ -329,12 +329,12 @@ async def jobs_page(request: Request):
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT jp.id, jp.title, jp.description, jp.location, jp.salary_min, jp.salary_max,
-                   jp.employment_type, jp.experience_level, jc.name as category
-            FROM job_posting jp
-            LEFT JOIN job_category jc ON jp.category_id = jc.id
-            WHERE jp.status = 'active'
-            ORDER BY jp.created_at DESC
+            SELECT j.id, j.title, j.description, j.location, j.salary_min, j.salary_max,
+                   j.employment_type, j.experience_level, c.name as category
+            FROM job_posting j
+            LEFT JOIN job_category c ON j.category_id = c.id
+            WHERE j.status = 'active'
+            ORDER BY j.created_at DESC
         """)
 
         jobs = cursor.fetchall()
@@ -353,6 +353,158 @@ async def jobs_page(request: Request):
             "user": user,
             "error": "Unable to load jobs"
         })
+
+# API Routes for frontend JavaScript calls
+@app.get("/api/jobs")
+async def api_get_jobs():
+    """API endpoint to get all active jobs."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT j.id, j.title, j.description, j.location, j.salary_min, j.salary_max,
+                   j.employment_type, j.experience_level, c.name as category
+            FROM job_posting j
+            LEFT JOIN job_category c ON j.category_id = c.id
+            WHERE j.status = 'active'
+            ORDER BY j.created_at DESC
+        """)
+
+        jobs = cursor.fetchall()
+        conn.close()
+
+        jobs_list = []
+        for job in jobs:
+            jobs_list.append({
+                "id": job[0],
+                "title": job[1],
+                "description": job[2],
+                "location": job[3],
+                "salary_min": job[4],
+                "salary_max": job[5],
+                "employment_type": job[6],
+                "experience_level": job[7],
+                "category": job[8]
+            })
+
+        return {"jobs": jobs_list}
+
+    except Exception as e:
+        logger.error("API Jobs error", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Unable to load jobs"}
+        )
+
+@app.post("/api/auth/login")
+async def api_login(request: Request, username: str = Form(...), password: str = Form(...)):
+    """API endpoint for login."""
+    user = authenticate_user(username, password)
+
+    if not user:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Invalid username or password"}
+        )
+
+    # Create session
+    request.session["user_id"] = user["id"]
+    request.session["username"] = user["username"]
+
+    # Create access token
+    token = create_access_token({"user_id": user["id"], "username": user["username"]})
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "message": "Login successful",
+            "token": token,
+            "user": {
+                "id": user["id"],
+                "username": user["username"],
+                "firstname": user["firstname"],
+                "lastname": user["lastname"],
+                "email": user["email"],
+                "role_id": user["role_id"]
+            }
+        }
+    )
+
+@app.post("/api/auth/register")
+async def api_register(
+    username: str = Form(...),
+    password: str = Form(...),
+    email: str = Form(...),
+    firstname: str = Form(...),
+    lastname: str = Form(...)
+):
+    """API endpoint for registration."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check if username or email already exists
+        cursor.execute("SELECT id FROM credential WHERE username = ?", (username,))
+        if cursor.fetchone():
+            conn.close()
+            return JSONResponse(
+                status_code=409,
+                content={"error": "Username already exists"}
+            )
+
+        cursor.execute("SELECT id FROM person WHERE email = ?", (email,))
+        if cursor.fetchone():
+            conn.close()
+            return JSONResponse(
+                status_code=409,
+                content={"error": "Email already exists"}
+            )
+
+        # Create person
+        cursor.execute("""
+            INSERT INTO person (firstname, lastname, email, role_id)
+            VALUES (?, ?, ?, ?)
+        """, (firstname, lastname, email, 2))  # Default to Applicant role
+
+        person_id = cursor.lastrowid
+
+        # Create credential
+        hashed_password = get_password_hash(password)
+        cursor.execute("""
+            INSERT INTO credential (person_id, username, password)
+            VALUES (?, ?, ?)
+        """, (person_id, username, hashed_password))
+
+        conn.commit()
+        conn.close()
+
+        return JSONResponse(
+            status_code=201,
+            content={"message": "Registration successful"}
+        )
+
+    except Exception as e:
+        logger.error("API Registration failed", error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Registration failed. Please try again."}
+        )
+
+@app.get("/api/user/profile")
+async def api_get_user_profile(request: Request):
+    """API endpoint to get user profile."""
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse(
+            status_code=401,
+            content={"error": "Not authenticated"}
+        )
+    
+    return JSONResponse(
+        status_code=200,
+        content={"user": user}
+    )
 
 @app.post("/jobs/{job_id}/apply")
 async def apply_to_job(request: Request, job_id: int, cover_letter: str = Form(...)):
@@ -423,6 +575,91 @@ async def health_check():
 
     except Exception as e:
         return {"status": "unhealthy", "error": str(e)}
+
+# Microservice routing
+import httpx
+
+# Service URLs - these would normally come from service discovery
+SERVICE_URLS = {
+    "auth": "http://localhost:8081",
+    "registration": "http://localhost:8888", 
+    "job_application": "http://localhost:8082",
+    "discovery": "http://localhost:9090",
+    "config": "http://localhost:9999"
+}
+
+async def route_to_service(service_name: str, path: str, method: str = "GET", **kwargs):
+    """Route requests to microservices."""
+    if service_name not in SERVICE_URLS:
+        return JSONResponse(
+            status_code=404,
+            content={"error": f"Service {service_name} not found"}
+        )
+    
+    url = f"{SERVICE_URLS[service_name]}{path}"
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if method == "GET":
+                response = await client.get(url, **kwargs)
+            elif method == "POST":
+                response = await client.post(url, **kwargs)
+            elif method == "PUT":
+                response = await client.put(url, **kwargs)
+            elif method == "DELETE":
+                response = await client.delete(url, **kwargs)
+            else:
+                return JSONResponse(
+                    status_code=405,
+                    content={"error": "Method not allowed"}
+                )
+            
+            return JSONResponse(
+                status_code=response.status_code,
+                content=response.json() if response.headers.get("content-type", "").startswith("application/json") else {"message": response.text}
+            )
+    except httpx.TimeoutException:
+        logger.error("Service timeout", service=service_name, path=path)
+        return JSONResponse(
+            status_code=503,
+            content={"error": f"Service {service_name} timeout"}
+        )
+    except httpx.ConnectError:
+        logger.warning("Service unavailable", service=service_name, path=path)
+        # For now, handle locally if service is unavailable
+        return JSONResponse(
+            status_code=503,
+            content={"error": f"Service {service_name} unavailable"}
+        )
+    except Exception as e:
+        logger.error("Service routing error", service=service_name, path=path, error=str(e))
+        return JSONResponse(
+            status_code=500,
+            content={"error": "Internal routing error"}
+        )
+
+# Route to auth service
+@app.api_route("/api/auth/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def route_auth(path: str, request: Request):
+    """Route authentication requests to auth service."""
+    # For now, handle locally since auth service integration is complex
+    # This would route to auth service when it's properly set up
+    return JSONResponse(
+        status_code=501,
+        content={"error": "Auth service routing not implemented yet"}
+    )
+
+# Route to registration service  
+@app.api_route("/api/registration/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def route_registration(path: str, request: Request):
+    """Route registration requests to registration service."""
+    return await route_to_service("registration", f"/{path}", request.method)
+
+# Route to job application service
+@app.api_route("/api/applications/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def route_job_applications(path: str, request: Request):
+    """Route job application requests to job application service."""
+    return await route_to_service("job_application", f"/{path}", request.method)
 
 # Error handler for unhandled exceptions
 @app.exception_handler(Exception)

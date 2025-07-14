@@ -50,6 +50,15 @@ args = "python scripts/init_database.py"
 task = "shell.exec"
 args = "python edge_service/main.py"
 
+[[workflows.workflow]]
+name = "Start All Microservices"
+author = 45002581
+mode = "sequential"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "python start_all_microservices.py"
+
 [[ports]]
 localPort = 8080
 externalPort = 80

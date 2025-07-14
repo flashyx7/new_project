@@ -1,4 +1,3 @@
-
 // Recruitment System JavaScript Utilities
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -9,10 +8,10 @@ document.addEventListener('DOMContentLoaded', function() {
 function initializeApp() {
     // Set up event listeners
     setupEventListeners();
-    
+
     // Initialize forms
     initializeForms();
-    
+
     // Setup CSRF protection
     setupCSRF();
 }
@@ -23,19 +22,45 @@ function setupEventListeners() {
     applyForms.forEach(form => {
         form.addEventListener('submit', handleJobApplication);
     });
-    
+
     // Login form validation
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
-        loginForm.addEventListener('submit', validateLoginForm);
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(loginForm);
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.token) {
+                        localStorage.setItem('token', data.token);
+                    }
+                    window.location.href = '/dashboard';
+                } else {
+                    const error = await response.json();
+                    showError(error.error || 'Login failed');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                // Fallback to regular form submission
+                loginForm.submit();
+            }
+        });
     }
-    
+
     // Registration form validation
     const registerForm = document.getElementById('registerForm');
     if (registerForm) {
         registerForm.addEventListener('submit', validateRegisterForm);
     }
-    
+
     // Search functionality
     const searchInput = document.getElementById('jobSearch');
     if (searchInput) {
@@ -51,7 +76,7 @@ function initializeForms() {
             input.value = new Date().toISOString().split('T')[0];
         }
     });
-    
+
     // Initialize file upload indicators
     const fileInputs = document.querySelectorAll('input[type="file"]');
     fileInputs.forEach(input => {
@@ -62,7 +87,7 @@ function initializeForms() {
 function setupCSRF() {
     // Get CSRF token from meta tag or form
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-    
+
     // Add CSRF token to all forms
     const forms = document.querySelectorAll('form');
     forms.forEach(form => {
@@ -78,21 +103,21 @@ function setupCSRF() {
 
 async function handleJobApplication(event) {
     event.preventDefault();
-    
+
     const form = event.target;
     const formData = new FormData(form);
     const jobId = form.dataset.jobId;
-    
+
     try {
         showLoading(true);
-        
+
         const response = await fetch(`/jobs/${jobId}/apply`, {
             method: 'POST',
             body: formData
         });
-        
+
         const result = await response.json();
-        
+
         if (response.ok) {
             showMessage('Application submitted successfully!', 'success');
             form.reset();
@@ -117,19 +142,19 @@ function validateLoginForm(event) {
     const form = event.target;
     const username = form.querySelector('input[name="username"]').value.trim();
     const password = form.querySelector('input[name="password"]').value;
-    
+
     if (!username) {
         showMessage('Username is required', 'error');
         event.preventDefault();
         return false;
     }
-    
+
     if (!password) {
         showMessage('Password is required', 'error');
         event.preventDefault();
         return false;
     }
-    
+
     return true;
 }
 
@@ -137,14 +162,14 @@ function validateRegisterForm(event) {
     const form = event.target;
     const password = form.querySelector('input[name="password"]').value;
     const email = form.querySelector('input[name="email"]').value;
-    
+
     // Password validation
     if (password.length < 6) {
         showMessage('Password must be at least 6 characters long', 'error');
         event.preventDefault();
         return false;
     }
-    
+
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
@@ -152,19 +177,19 @@ function validateRegisterForm(event) {
         event.preventDefault();
         return false;
     }
-    
+
     return true;
 }
 
 function handleJobSearch(event) {
     const searchTerm = event.target.value.toLowerCase();
     const jobCards = document.querySelectorAll('.job-card');
-    
+
     jobCards.forEach(card => {
         const title = card.querySelector('.job-title')?.textContent.toLowerCase() || '';
         const description = card.querySelector('.job-description')?.textContent.toLowerCase() || '';
         const location = card.querySelector('.job-location')?.textContent.toLowerCase() || '';
-        
+
         if (title.includes(searchTerm) || description.includes(searchTerm) || location.includes(searchTerm)) {
             card.style.display = 'block';
         } else {
@@ -176,7 +201,7 @@ function handleJobSearch(event) {
 function handleFileUpload(event) {
     const input = event.target;
     const file = input.files[0];
-    
+
     if (file) {
         // Validate file size (5MB limit)
         if (file.size > 5 * 1024 * 1024) {
@@ -184,7 +209,7 @@ function handleFileUpload(event) {
             input.value = '';
             return;
         }
-        
+
         // Validate file type for resumes
         const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
         if (input.name === 'resume' && !allowedTypes.includes(file.type)) {
@@ -192,7 +217,7 @@ function handleFileUpload(event) {
             input.value = '';
             return;
         }
-        
+
         // Show file name
         const fileLabel = input.parentNode.querySelector('.file-label');
         if (fileLabel) {
@@ -205,7 +230,7 @@ function showMessage(message, type = 'info') {
     // Remove existing messages
     const existingMessages = document.querySelectorAll('.alert-message');
     existingMessages.forEach(msg => msg.remove());
-    
+
     // Create new message
     const messageDiv = document.createElement('div');
     messageDiv.className = `alert alert-${type} alert-message`;
@@ -219,7 +244,7 @@ function showMessage(message, type = 'info') {
         max-width: 400px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     `;
-    
+
     // Set colors based on type
     switch (type) {
         case 'success':
@@ -237,9 +262,9 @@ function showMessage(message, type = 'info') {
             messageDiv.style.color = '#0c5460';
             messageDiv.style.border = '1px solid #bee5eb';
     }
-    
+
     messageDiv.textContent = message;
-    
+
     // Add close button
     const closeBtn = document.createElement('button');
     closeBtn.innerHTML = '&times;';
@@ -256,9 +281,9 @@ function showMessage(message, type = 'info') {
     `;
     closeBtn.onclick = () => messageDiv.remove();
     messageDiv.appendChild(closeBtn);
-    
+
     document.body.appendChild(messageDiv);
-    
+
     // Auto-remove after 5 seconds
     setTimeout(() => {
         if (messageDiv.parentNode) {
@@ -269,7 +294,7 @@ function showMessage(message, type = 'info') {
 
 function showLoading(show) {
     let loadingDiv = document.getElementById('loading-overlay');
-    
+
     if (show) {
         if (!loadingDiv) {
             loadingDiv = document.createElement('div');
@@ -286,7 +311,7 @@ function showLoading(show) {
                 align-items: center;
                 z-index: 9999;
             `;
-            
+
             const spinner = document.createElement('div');
             spinner.style.cssText = `
                 border: 4px solid #f3f3f3;
@@ -296,7 +321,7 @@ function showLoading(show) {
                 height: 50px;
                 animation: spin 1s linear infinite;
             `;
-            
+
             // Add CSS animation
             const style = document.createElement('style');
             style.textContent = `
@@ -306,7 +331,7 @@ function showLoading(show) {
                 }
             `;
             document.head.appendChild(style);
-            
+
             loadingDiv.appendChild(spinner);
             document.body.appendChild(loadingDiv);
         }
@@ -337,15 +362,32 @@ async function apiCall(url, options = {}) {
             'Content-Type': 'application/json',
         },
     };
-    
+
     const finalOptions = { ...defaultOptions, ...options };
-    
+
     try {
         const response = await fetch(url, finalOptions);
         return response;
     } catch (error) {
         console.error('API call failed:', error);
         throw error;
+    }
+}
+
+// Load jobs
+async function loadJobs() {
+    try {
+        const response = await fetch('/api/jobs');
+        if (response.ok) {
+            const data = await response.json();
+            displayJobs(data.jobs);
+        } else {
+            console.error('Failed to load jobs');
+            // If API fails, the page should still show jobs from server-side rendering
+        }
+    } catch (error) {
+        console.error('Error loading jobs:', error);
+        // If API fails, the page should still show jobs from server-side rendering
     }
 }
 

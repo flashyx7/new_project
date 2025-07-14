@@ -129,7 +129,7 @@ INSERT INTO job_category (category_id, name, description) VALUES
 (4, 'Human Resources', 'HR and people management roles'),
 (5, 'Finance', 'Finance and accounting roles');
 
--- Create job posting table
+-- Job postings table
 CREATE TABLE job_posting (
     job_posting_id INTEGER PRIMARY KEY AUTOINCREMENT,
     title VARCHAR(200) NOT NULL,
@@ -155,6 +155,22 @@ CREATE TABLE job_posting (
     FOREIGN KEY (category_id) REFERENCES job_category(category_id),
     FOREIGN KEY (posted_by) REFERENCES person(person_id)
 );
+
+-- Insert some sample job categories
+INSERT OR IGNORE INTO job_category (name, description) VALUES 
+('Software Development', 'Programming and software engineering roles'),
+('Marketing', 'Marketing and advertising positions'),
+('Sales', 'Sales and business development roles'),
+('HR', 'Human resources positions'),
+('Finance', 'Financial and accounting roles');
+
+-- Insert some sample job postings
+INSERT OR IGNORE INTO job_posting (title, description, location, salary_min, salary_max, employment_type, experience_level, category_id) VALUES
+('Senior Python Developer', 'Looking for an experienced Python developer to join our team', 'Remote', 80000, 120000, 'Full-time', 'Senior', 1),
+('Marketing Manager', 'Lead our marketing efforts and drive growth', 'New York, NY', 70000, 90000, 'Full-time', 'Mid-level', 2),
+('Sales Representative', 'Join our sales team and help us grow our customer base', 'Chicago, IL', 50000, 70000, 'Full-time', 'Entry-level', 3),
+('HR Specialist', 'Support our human resources operations', 'Los Angeles, CA', 55000, 75000, 'Full-time', 'Mid-level', 4),
+('Junior Software Engineer', 'Great opportunity for new graduates', 'San Francisco, CA', 90000, 110000, 'Full-time', 'Entry-level', 1);
 
 -- Create job skill requirements table
 CREATE TABLE job_skill_requirement (
